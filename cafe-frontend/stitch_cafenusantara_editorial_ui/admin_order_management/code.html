@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Order Management - Brew &amp; Bean Admin Console</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Playfair+Display:wght@500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-container": "#5a682f",
+                        "surface-container-high": "#e9e8e4",
+                        "primary-fixed": "#ffdbd1",
+                        "inverse-surface": "#2f312e",
+                        "on-error-container": "#93000a",
+                        "inverse-primary": "#ffb59f",
+                        "surface-bright": "#faf9f5",
+                        "surface": "#faf9f5",
+                        "secondary-container": "#d6e7a1",
+                        "surface-variant": "#e3e2df",
+                        "on-tertiary-container": "#fffcfb",
+                        "error-container": "#ffdad6",
+                        "on-surface": "#1b1c1a",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary": "#ffffff",
+                        "on-primary-fixed": "#3a0a00",
+                        "tertiary-fixed": "#e4e2e1",
+                        "on-primary-container": "#fffbff",
+                        "secondary-fixed": "#d9eaa3",
+                        "secondary-fixed-dim": "#bdce89",
+                        "outline-variant": "#dac1bb",
+                        "on-primary-fixed-variant": "#76321e",
+                        "tertiary-container": "#757474",
+                        "on-primary": "#ffffff",
+                        "surface-dim": "#dbdad6",
+                        "surface-container": "#efeeea",
+                        "on-secondary-fixed": "#161f00",
+                        "on-tertiary-fixed": "#1b1c1c",
+                        "on-surface-variant": "#54433e",
+                        "inverse-on-surface": "#f2f1ed",
+                        "secondary": "#56642b",
+                        "on-background": "#1b1c1a",
+                        "tertiary": "#5c5c5c",
+                        "surface-container-low": "#f4f4f0",
+                        "surface-tint": "#944932",
+                        "surface-container-highest": "#e3e2df",
+                        "primary-container": "#af5e46",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed-variant": "#3e4c16",
+                        "outline": "#87736d",
+                        "background": "#faf9f5",
+                        "primary-fixed-dim": "#ffb59f",
+                        "primary": "#914730",
+                        "error": "#ba1a1a",
+                        "tertiary-fixed-dim": "#c8c6c5",
+                        "on-tertiary-fixed-variant": "#474747",
+                        "on-error": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "gutter": "24px",
+                        "base": "8px",
+                        "grid-margin": "40px",
+                        "section-gap-mobile": "64px",
+                        "section-gap-desktop": "120px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "display-lg": ["Playfair Display"],
+                        "display-lg-mobile": ["Playfair Display"],
+                        "headline-md": ["Playfair Display"],
+                        "label-sm": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Playfair Display"]
+                    },
+                    "fontSize": {
+                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+                        "label-caps": ["12px", { "lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "600" }],
+                        "display-lg": ["64px", { "lineHeight": "72px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "display-lg-mobile": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "headline-md": ["24px", { "lineHeight": "32px", "fontWeight": "500" }],
+                        "label-sm": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+                        "body-lg": ["18px", { "lineHeight": "28px", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "500" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: #dac1bb; /* outline-variant */
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md antialiased overflow-hidden">
+<!-- SideNavBar -->
+<nav class="bg-surface h-screen w-64 fixed left-0 top-0 border-r border-outline-variant flex flex-col h-full py-8 px-4 transition-all duration-300 ease-in-out z-20">
+<div class="mb-12 px-4">
+<h1 class="font-headline-md text-headline-md text-primary">Brew &amp; Bean</h1>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1">Admin Terminal</p>
+</div>
+<div class="flex-1 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary transition-colors duration-200 font-label-caps text-label-caps" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-primary font-bold border-r-2 border-primary hover:text-primary transition-colors duration-200 font-label-caps text-label-caps bg-surface-container-low" href="#">
+<span class="material-symbols-outlined">shopping_cart</span>
+                Order Management
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary transition-colors duration-200 font-label-caps text-label-caps" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+                Catalog &amp; Inventory
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary transition-colors duration-200 font-label-caps text-label-caps" href="#">
+<span class="material-symbols-outlined">rate_review</span>
+                Content &amp; Reviews
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-primary transition-colors duration-200 font-label-caps text-label-caps" href="#">
+<span class="material-symbols-outlined">settings</span>
+                Settings
+            </a>
+</div>
+<div class="mt-auto pt-8 px-4">
+<button class="w-full py-3 bg-surface-variant text-on-surface-variant font-label-caps text-label-caps rounded hover:bg-outline-variant transition-colors flex items-center justify-center gap-2">
+                Open Register
+            </button>
+<div class="mt-6 flex items-center gap-3">
+<img alt="Admin Profile Avatar" class="w-10 h-10 rounded-full object-cover border border-outline-variant" data-alt="A small, circular avatar portrait of a barista or admin user, styled in a warm, minimalist, well-lit environment reflecting a premium coffee shop aesthetic. Natural lighting, soft focus background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJmD-jGjyc4HPwmYj3dN4M-V3ebmTsjqc10tKRUn9F3RMSzcTpjC3oGNygo7ke17nH8Es4WiZdnLFia-nGdZHyv_BywXIZ9oybOtOpO_aKz-6cvBUkAWKIMYOgDn8HvyOZcIcs-Ukp6syiIVmpuzzlT6oceS0y6x5pjQIjP6iQTTDKqLXHtxGj58-96H6SxlCPkzVloj1dHmD1OyIRSMTEJADEEjqWxauScrs8oY5ZpZLG4gcO1aE_E5HPH_JbMp2wMGFyCeLmnIE"/>
+</div>
+</div>
+</nav>
+<!-- TopAppBar -->
+<header class="bg-surface fixed top-0 right-0 w-[calc(100%-16rem)] border-b border-outline-variant flex justify-between items-center h-16 px-gutter ml-64 z-10 transition-all">
+<div class="flex-1 flex items-center gap-4">
+<h2 class="font-headline-md text-headline-md text-primary font-bold">Admin Console</h2>
+<div class="relative ml-8 flex-1 max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline">search</span>
+<input class="w-full bg-surface-container-low border-b border-outline-variant pl-10 pr-4 py-2 focus:outline-none focus:border-primary transition-colors font-body-md text-body-md text-on-surface placeholder:text-outline bg-transparent focus-within:border-primary" placeholder="Search orders..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Oct 24, 2023 | 10:45 AM</span>
+<div class="flex items-center gap-2">
+<button class="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-all flex items-center justify-center">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-all flex items-center justify-center">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</div>
+<img alt="Admin User" class="w-8 h-8 rounded-full object-cover border border-outline-variant" data-alt="A small, circular avatar portrait of an admin user. The image is a close-up, professionally lit with warm tones, reflecting a high-end, slow-living coffee brand aesthetic. Minimalist background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAvNMBL12nEnICWkT17ywdgQYoPgdb8__snGaDdFOCdu04T6NIGmUoe6bJwhmaT-5e_aF48xMPsEhhGYeeo-_ixIkYa_42uoq5Hjxboy_F7lbY4Szlvgi7vsBoe-PmyiZA7g6f0XmFL3qks18BYHAYtCOglovKsGU36r6EYLPmJrzJTPr-u-aPhoYv44XtO05FwpQtX8vcxrq8vOECKETWUGtCrRt_jF1LET9V2tOb86aefzeUwQeJ-I_d1OjnHZQmZsxZ30KAP1gU"/>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-64 mt-16 h-[calc(100vh-4rem)] flex bg-background">
+<!-- Left: Order List Panel -->
+<div class="w-1/3 min-w-[320px] max-w-[400px] border-r border-outline-variant bg-surface flex flex-col">
+<div class="p-4 border-b border-outline-variant bg-surface-container-low flex justify-between items-center sticky top-0">
+<h3 class="font-label-caps text-label-caps text-primary tracking-widest">Active Orders</h3>
+<div class="flex gap-2">
+<span class="bg-secondary-container text-on-secondary-container font-label-sm text-label-sm px-2 py-1 rounded">12 New</span>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+<!-- Active Order Card -->
+<div class="p-4 border border-outline-variant bg-surface-container-lowest cursor-pointer hover:border-primary transition-colors relative">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-primary">#ORD-0992</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">10:42 AM</span>
+</div>
+<div class="font-body-md text-body-md text-on-surface mb-1">Maya R.</div>
+<div class="flex justify-between items-end mt-4">
+<span class="font-label-sm text-label-sm text-tertiary">3 Items</span>
+<span class="font-body-md text-body-md font-medium text-primary">Rp 145.000</span>
+</div>
+</div>
+<!-- Unread Order Card -->
+<div class="p-4 border border-outline-variant bg-surface cursor-pointer hover:border-outline transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">#ORD-0993</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">10:44 AM</span>
+</div>
+<div class="font-body-md text-body-md text-on-surface mb-1">Dian P.</div>
+<div class="flex justify-between items-end mt-4">
+<span class="font-label-sm text-label-sm text-tertiary">1 Item</span>
+<span class="font-body-md text-body-md font-medium text-on-surface-variant">Rp 45.000</span>
+</div>
+</div>
+<!-- Read Order Card -->
+<div class="p-4 border border-outline-variant bg-surface cursor-pointer hover:border-outline transition-colors">
+<div class="flex justify-between items-start mb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">#ORD-0991</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">10:30 AM</span>
+</div>
+<div class="font-body-md text-body-md text-on-surface mb-1">Budi S.</div>
+<div class="flex justify-between items-end mt-4">
+<span class="font-label-sm text-label-sm text-tertiary">2 Items</span>
+<span class="font-body-md text-body-md font-medium text-on-surface-variant">Rp 90.000</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Right: Order Detail Panel -->
+<div class="flex-1 flex flex-col bg-surface-bright relative">
+<!-- Detail Header -->
+<div class="px-gutter py-6 border-b border-outline-variant flex justify-between items-center bg-surface">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-1">Order #ORD-0992</h2>
+<p class="font-body-md text-body-md text-tertiary">Placed on Oct 24, 2023 at 10:42 AM</p>
+</div>
+<div class="flex gap-4">
+<button class="px-6 py-3 border border-outline text-on-surface font-label-caps text-label-caps hover:bg-surface-container-low transition-colors">
+                        Print Receipt
+                    </button>
+<button class="px-6 py-3 bg-primary text-on-primary font-label-caps text-label-caps hover:bg-surface-tint transition-colors">
+                        Terima Pesanan
+                    </button>
+</div>
+</div>
+<!-- Detail Content -->
+<div class="flex-1 overflow-y-auto p-gutter custom-scrollbar space-y-10">
+<!-- Customer Info -->
+<section>
+<h4 class="font-label-caps text-label-caps text-tertiary mb-4 tracking-widest border-b border-outline-variant pb-2">Customer Details</h4>
+<div class="grid grid-cols-2 gap-8">
+<div>
+<p class="font-label-sm text-label-sm text-tertiary mb-1">Name</p>
+<p class="font-body-md text-body-md text-on-surface">Maya R.</p>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-tertiary mb-1">Contact</p>
+<p class="font-body-md text-body-md text-on-surface">+62 812-3456-7890</p>
+</div>
+</div>
+</section>
+<!-- Itemized List -->
+<section>
+<h4 class="font-label-caps text-label-caps text-tertiary mb-4 tracking-widest border-b border-outline-variant pb-2">Order Items</h4>
+<div class="space-y-4">
+<div class="flex justify-between items-center py-2">
+<div class="flex gap-4 items-center">
+<div class="font-body-md text-body-md text-tertiary w-8">2x</div>
+<div>
+<p class="font-body-md text-body-md text-on-surface">Iced Artisan Latte</p>
+<p class="font-label-sm text-label-sm text-tertiary">Oat Milk, Less Sugar</p>
+</div>
+</div>
+<span class="font-body-md text-body-md text-on-surface">Rp 90.000</span>
+</div>
+<div class="border-t border-outline-variant opacity-50"></div>
+<div class="flex justify-between items-center py-2">
+<div class="flex gap-4 items-center">
+<div class="font-body-md text-body-md text-tertiary w-8">1x</div>
+<div>
+<p class="font-body-md text-body-md text-on-surface">Almond Croissant</p>
+</div>
+</div>
+<span class="font-body-md text-body-md text-on-surface">Rp 55.000</span>
+</div>
+</div>
+</section>
+<!-- Financials & Payment -->
+<div class="flex gap-gutter">
+<!-- Payment Method -->
+<section class="flex-1">
+<h4 class="font-label-caps text-label-caps text-tertiary mb-4 tracking-widest border-b border-outline-variant pb-2">Payment Info</h4>
+<div>
+<p class="font-label-sm text-label-sm text-tertiary mb-1">Method</p>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">qr_code_scanner</span>
+<p class="font-body-md text-body-md text-on-surface">QRIS (Paid)</p>
+</div>
+</div>
+</section>
+<!-- Financial Breakdown -->
+<section class="flex-1 bg-surface-container-low p-6 border border-outline-variant">
+<div class="space-y-3 mb-4">
+<div class="flex justify-between font-body-md text-body-md text-tertiary">
+<span>Subtotal</span>
+<span>Rp 145.000</span>
+</div>
+<div class="flex justify-between font-body-md text-body-md text-tertiary">
+<span>Tax (10%)</span>
+<span>Rp 14.500</span>
+</div>
+<div class="flex justify-between font-body-md text-body-md text-secondary">
+<span>Promo (10%)</span>
+<span>- Rp 14.500</span>
+</div>
+</div>
+<div class="border-t border-outline-variant pt-4 flex justify-between items-end">
+<span class="font-label-caps text-label-caps text-on-surface tracking-widest">Total</span>
+<span class="font-headline-md text-headline-md text-primary font-bold">Rp 145.000</span>
+</div>
+</section>
+</div>
+</div>
+<!-- Bottom Action -->
+<div class="p-gutter border-t border-outline-variant bg-surface flex justify-end">
+<button class="px-8 py-3 border border-outline text-on-surface font-label-caps text-label-caps hover:bg-surface-container-low transition-colors">
+                    Tandai Selesai
+                </button>
+</div>
+</div>
+</main>
+</body></html>

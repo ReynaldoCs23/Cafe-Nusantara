@@ -1,0 +1,102 @@
+POST http://127.0.0.1:8000/api/v1/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "email": "admin@cafenusantara.com",
+  "password": "password"
+}
+
+###
+
+### Tes Logout (Gunakan Token)
+POST http://127.0.0.1:8000/api/v1/admin/logout
+Accept: application/json
+Authorization: Bearer 1|gikDnZoA6koeM3m7NwmmgiUupxbKNeUr8f9vx52612a9dda2
+
+### Tes Tampilan (Gunakan Token)
+GET http://127.0.0.1:8000/api/v1/products
+Accept: application/json
+Authorization: Bearer 1|gikDnZoA6koeM3m7NwmmgiUupxbKNeUr8f9vx52612a9dda2
+
+### Tes Checkout (Membuat Pesanan Baru)
+POST http://127.0.0.1:8000/api/v1/checkout
+Content-Type: application/json
+Accept: application/json
+
+{
+  "items": [
+    {
+      "product_id": 1,
+      "quantity": 2
+    },
+    {
+      "product_id": 4,
+      "quantity": 1
+    }
+  ]
+}
+
+### Lihat Semua Pesanan Masuk (Khusus Admin)
+GET http://127.0.0.1:8000/api/v1/admin/orders
+Accept: application/json
+Authorization: Bearer 2|7CYCxQVm9XIIVhJH0SJtwkNkxBK1kC9EvghbM5BX1fb0f078
+
+###
+
+### Ubah Status Pesanan Menjadi "Diproses"
+PUT http://127.0.0.1:8000/api/v1/admin/orders/MASUKKAN_ID_ORDER_DI_SINI/status
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer 2|7CYCxQVm9XIIVhJH0SJtwkNkxBK1kC9EvghbM5BX1fb0f078
+{
+  "status": "processing"
+}
+
+### Simulasi Sinyal Webhook Midtrans (Pembayaran Sukses)
+POST http://127.0.0.1:8000/api/v1/payment/webhook
+Content-Type: application/json
+Accept: application/json
+
+{
+  "order_id": "ORD-1783671295-IDNB",
+  "transaction_status": "settlement"
+}
+
+### Lihat Analitik Dashboard Admin
+GET http://127.0.0.1:8000/api/v1/admin/dashboard-metrics
+Accept: application/json
+Authorization: Bearer 2|7CYCxQVm9XIIVhJH0SJtwkNkxBK1kC9EvghbM5BX1fb0f078
+
+### Sinkronisasi Paksa ke Moka POS
+POST http://127.0.0.1:8000/api/v1/admin/orders/c202f966-1715-4edf-9447-0323626a5389/sync-moka
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer 2|7CYCxQVm9XIIVhJH0SJtwkNkxBK1kC9EvghbM5BX1fb0f078
+
+### Tambah Kategori Baru (Opsional)
+POST http://127.0.0.1:8000/api/v1/admin/categories
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer TOKEN_KAMU_DI_SINI
+
+{
+  "name": "Camilan Manis"
+}
+
+###
+
+### Tambah Menu Baru (Produk)
+POST http://127.0.0.1:8000/api/v1/admin/products
+Content-Type: application/json
+Accept: application/json
+Authorization: Bearer 2|7CYCxQVm9XIIVhJH0SJtwkNkxBK1kC9EvghbM5BX1fb0f078
+
+{
+  "category_id": 1,
+  "name": "Kopi Susu Caramel Macchiato",
+  "price": 32000,
+  "stock": 30,
+  "description": "Perpaduan espresso, susu segar, dan sirup karamel premium.",
+  "is_active": true
+}

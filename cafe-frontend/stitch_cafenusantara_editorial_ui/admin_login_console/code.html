@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+
+<html class="light" lang="id"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login | CafeNusantara Admin Console</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Playfair+Display:wght@100..900&display=swap" rel="stylesheet"/>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                "inverse-primary": "#ffb59f",
+                "on-primary": "#ffffff",
+                "outline-variant": "#dac1bb",
+                "on-secondary-fixed-variant": "#3e4c16",
+                "surface-variant": "#e3e2df",
+                "outline": "#87736d",
+                "secondary-container": "#d6e7a1",
+                "secondary": "#56642b",
+                "on-error-container": "#93000a",
+                "inverse-on-surface": "#f2f1ed",
+                "on-surface-variant": "#54433e",
+                "surface-container-lowest": "#ffffff",
+                "secondary-fixed-dim": "#bdce89",
+                "on-error": "#ffffff",
+                "on-primary-container": "#fffbff",
+                "tertiary-fixed-dim": "#c8c6c5",
+                "secondary-fixed": "#d9eaa3",
+                "on-secondary": "#ffffff",
+                "primary-fixed": "#ffdbd1",
+                "surface-container-low": "#f4f4f0",
+                "surface-container-highest": "#e3e2df",
+                "surface-bright": "#faf9f5",
+                "primary-fixed-dim": "#ffb59f",
+                "on-tertiary": "#ffffff",
+                "error-container": "#ffdad6",
+                "tertiary": "#5c5c5c",
+                "surface-tint": "#944932",
+                "surface-container": "#efeeea",
+                "on-surface": "#1b1c1a",
+                "error": "#ba1a1a",
+                "on-secondary-container": "#5a682f",
+                "surface-dim": "#dbdad6",
+                "surface-container-high": "#e9e8e4",
+                "surface": "#faf9f5",
+                "on-primary-fixed": "#3a0a00",
+                "background": "#faf9f5",
+                "primary": "#914730",
+                "on-secondary-fixed": "#161f00",
+                "tertiary-container": "#757474",
+                "on-primary-fixed-variant": "#76321e",
+                "primary-container": "#af5e46",
+                "inverse-surface": "#2f312e",
+                "on-background": "#1b1c1a",
+                "on-tertiary-fixed-variant": "#474747",
+                "on-tertiary-container": "#fffcfb",
+                "tertiary-fixed": "#e4e2e1",
+                "on-tertiary-fixed": "#1b1c1c"
+            },
+            "borderRadius": {
+                "DEFAULT": "0.125rem",
+                "lg": "0.25rem",
+                "xl": "0.5rem",
+                "full": "0.75rem"
+            },
+            "spacing": {
+                "section-gap-mobile": "64px",
+                "grid-margin": "40px",
+                "base": "8px",
+                "gutter": "24px",
+                "section-gap-desktop": "120px"
+            },
+            "fontFamily": {
+                "label-sm": ["Inter"],
+                "label-caps": ["Inter"],
+                "body-md": ["Inter"],
+                "headline-md": ["Playfair Display"],
+                "display-lg-mobile": ["Playfair Display"],
+                "body-lg": ["Inter"],
+                "headline-lg": ["Playfair Display"],
+                "display-lg": ["Playfair Display"]
+            },
+            "fontSize": {
+                "label-sm": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "600"}],
+                "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "500"}],
+                "display-lg-mobile": ["40px", {"lineHeight": "48px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                "body-lg": ["18px", {"lineHeight": "28px", "fontWeight": "400"}],
+                "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "500"}],
+                "display-lg": ["64px", {"lineHeight": "72px", "letterSpacing": "-0.02em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body {
+            background-color: #F9FAFB;
+        }
+        .login-card {
+            border: 1px solid #E5E5E5;
+        }
+        input:focus {
+            outline: none;
+            border-color: #2C2C2C !important;
+            box-shadow: none !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-body-md text-on-surface selection:bg-primary-fixed selection:text-on-primary-fixed-variant">
+<!-- Top Navigation (Shell Implementation - Suppressed for Login but keeping Brand Integrity) -->
+<header class="w-full top-0 flex justify-center py-12 px-grid-margin">
+<div class="text-center">
+<h1 class="font-headline-md text-headline-md text-primary tracking-tight mb-2">CafeNusantara</h1>
+<p class="font-label-caps text-label-caps text-on-surface-variant tracking-widest">ADMIN TERMINAL</p>
+</div>
+</header>
+<!-- Main Content: Login Canvas -->
+<main class="flex-grow flex items-center justify-center px-4 pb-24">
+<div class="w-full max-w-[440px] bg-surface p-8 md:p-12 login-card rounded-sm animate-fade-in">
+<div class="mb-10 text-center">
+<h2 class="font-headline-md text-headline-md text-on-surface mb-2">Selamat Datang</h2>
+<p class="font-body-md text-body-md text-on-surface-variant">Silakan masuk ke akun administrator Anda.</p>
+</div>
+<form action="#" class="space-y-8" method="POST">
+<!-- Input Group: Email -->
+<div class="space-y-2">
+<label class="font-label-caps text-label-caps text-on-surface-variant" for="email">Email Admin</label>
+<div class="relative group">
+<input class="w-full bg-transparent border-b border-outline-variant py-3 pr-10 font-body-md text-body-md transition-all duration-300" id="email" name="email" placeholder="nama@cafenusantara.com" required="" type="email"/>
+<span class="material-symbols-outlined absolute right-0 top-3 text-on-surface-variant group-hover:text-primary transition-colors">alternate_email</span>
+</div>
+</div>
+<!-- Input Group: Password -->
+<div class="space-y-2">
+<div class="flex justify-between items-end">
+<label class="font-label-caps text-label-caps text-on-surface-variant" for="password">Kata Sandi</label>
+<a class="font-label-caps text-label-caps text-primary hover:opacity-70 transition-opacity" href="#">Lupa Kata Sandi?</a>
+</div>
+<div class="relative group">
+<input class="w-full bg-transparent border-b border-outline-variant py-3 pr-10 font-body-md text-body-md transition-all duration-300" id="password" name="password" placeholder="••••••••" required="" type="password"/>
+<button class="absolute right-0 top-3 text-on-surface-variant hover:text-primary transition-colors" type="button">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+</div>
+</div>
+<!-- Remember Me -->
+<div class="flex items-center space-x-3 group cursor-pointer">
+<div class="relative flex items-center">
+<input class="w-4 h-4 rounded-none border-outline text-primary focus:ring-0 cursor-pointer" id="remember" name="remember" type="checkbox"/>
+</div>
+<label class="font-body-md text-body-md text-on-surface-variant cursor-pointer group-hover:text-on-surface transition-colors" for="remember">
+                        Ingat Saya
+                    </label>
+</div>
+<!-- Action Button -->
+<div class="pt-4">
+<button class="w-full bg-primary text-on-primary py-4 px-6 font-label-caps text-label-caps tracking-widest hover:bg-primary-container transition-all duration-500 transform hover:-translate-y-0.5 active:translate-y-0 shadow-sm" type="submit">
+                        MASUK KE DASHBOARD
+                    </button>
+</div>
+</form>
+<!-- Decorative Divider -->
+<div class="mt-12 flex items-center justify-center space-x-4">
+<div class="h-[1px] w-8 bg-outline-variant"></div>
+<div class="w-6 h-6 bg-cover bg-center opacity-30" data-alt="A macro shot of a single, roasted coffee bean resting on a clean, white ceramic surface. The lighting is soft and directional, typical of high-end editorial food photography. The color palette is minimal, focusing on the deep warm browns of the bean against a clinical alabaster background, evoking a sense of artisanal precision and quiet luxury." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuD_ENW5JZDPBrWoccWSv-VF4HIGkufG2ksaV7BMwpqtFyeji99O10fzG9EZt-ySThItmKaECHDFbN99YJNhI9H9lbxsch4iznERu_KrnKyITFMITtAS-GL2gwSn96TEupJUMl1B27WScNbvDsrrlUr3LJdgG84HIsezqnJBfCIOoVxgh0oErz-BSx2yeFSZr9-qi3qFiErUSWrUHp_jjcgmW5o4fE7fgXyx3PTYm1Od0mgt7o0wRlkLkYtdEqeFooSYbU1ETuBCcPM')"></div>
+<div class="h-[1px] w-8 bg-outline-variant"></div>
+</div>
+</div>
+</main>
+<!-- Footer (Shell Implementation) -->
+<footer class="w-full px-grid-margin py-8 mt-auto flex flex-col md:flex-row justify-between items-center gap-4 bg-surface-container-low border-t border-outline-variant">
+<div class="font-label-caps text-label-caps tracking-widest text-on-surface-variant">
+            © 2024 Artisanal Brew Admin. All rights reserved.
+        </div>
+<div class="flex gap-8">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Support</a>
+</div>
+</footer>
+<!-- Background Atmospheric Effect -->
+<div class="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
+<div class="absolute top-[-10%] right-[-5%] w-[40%] h-[60%] bg-primary opacity-[0.03] blur-[120px] rounded-full"></div>
+<div class="absolute bottom-[-10%] left-[-5%] w-[40%] h-[60%] bg-secondary opacity-[0.03] blur-[120px] rounded-full"></div>
+</div>
+<script>
+        // Simple Interaction Logic
+        document.addEventListener('DOMContentLoaded', () => {
+            const passInput = document.getElementById('password');
+            const toggleBtn = passInput.nextElementSibling;
+            
+            toggleBtn.addEventListener('click', () => {
+                const type = passInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                passInput.setAttribute('type', type);
+                toggleBtn.querySelector('.material-symbols-outlined').textContent = type === 'password' ? 'visibility' : 'visibility_off';
+            });
+
+            // Form Submit Simulation
+            const form = document.querySelector('form');
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const btn = form.querySelector('button[type="submit"]');
+                const originalText = btn.textContent;
+                btn.textContent = 'MENGOTENTIKASI...';
+                btn.disabled = true;
+                btn.classList.add('opacity-80');
+                
+                setTimeout(() => {
+                    // Visual feedback only for demo
+                    btn.textContent = 'BERHASIL...';
+                    btn.classList.replace('bg-primary', 'bg-secondary');
+                    setTimeout(() => {
+                        alert('Akses Admin Diterima. Mengalihkan ke Dashboard...');
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                        btn.classList.replace('bg-secondary', 'bg-primary');
+                        btn.classList.remove('opacity-80');
+                    }, 500);
+                }, 1500);
+            });
+        });
+    </script>
+</body></html>
