@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Exports\OrdersExport;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Services\InsightReport;
 use App\Services\SalesReport;
 use App\Support\StoreSettings;
 use Carbon\CarbonImmutable;
@@ -30,6 +31,27 @@ class ReportController extends Controller
             'summary' => $summary,
             'orders' => $orders,
         ]);
+    }
+
+    public function products(Request $request)
+    {
+        [$start, $end] = $this->range($request);
+
+        return response()->json(['data' => InsightReport::products($start, $end)]);
+    }
+
+    public function hourly(Request $request)
+    {
+        [$start, $end] = $this->range($request);
+
+        return response()->json(['data' => InsightReport::hourly($start, $end)]);
+    }
+
+    public function exceptions(Request $request)
+    {
+        [$start, $end] = $this->range($request);
+
+        return response()->json(['data' => InsightReport::exceptions($start, $end)]);
     }
 
     public function exportExcel(Request $request)

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\DiningTable;
+use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -45,6 +46,7 @@ class AdminTableController extends Controller
     {
         $table = DiningTable::findOrFail($id);
         $table->update(['qr_token' => DiningTable::newToken()]);
+        Audit::log('table.qr_rotated', $table, "QR {$table->name} dibuat ulang");
 
         return response()->json(['message' => "QR {$table->name} diperbarui. Cetak ulang QR untuk meja ini.", 'data' => $table]);
     }

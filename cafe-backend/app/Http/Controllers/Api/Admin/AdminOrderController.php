@@ -112,6 +112,58 @@ class AdminOrderController extends Controller
         ]);
     }
 
+    /** Diskon manual untuk pesanan yang belum dibayar (PRD PRM-01). */
+    public function discount(Request $request, string $id)
+    {
+        $order = Order::findOrFail($id);
+
+        $validated = $request->validate([
+            'type' => 'required|in:percent,amount,none',
+            'value' => 'required_unless:type,none|nullable|integer|min:1',
+            'reason' => 'required_unless:type,none|nullable|string|min:3|max:255',
+            'approver_username' => 'nullable|string',
+            'approver_pin' => 'nullable|string',
+        ]);
+
+        $order = $this->orders->applyDiscount($order, [
+            ...$validated,
+            'approver' => $request->filled('approver_pin') ? ManagerApproval::resolve($request, $request->user()) : null,
+        ], $request->user());
+
+        return response()->json(['message' => 'Diskon diperbarui', 'data' => $order]);
+    }
+
+    /** Refund sebagian per item untuk pesanan lunas. Selalu butuh manager atau PIN manager (PRD RFD-03). */
+    public function refund(Request $request, string $id)
+    {
+        $order = Order::findOrFail($id);
+
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.order_item_id' => 'required|integer',
+            'items.*.quantity' => 'required|integer|min:1',
+            'reason' => 'required|string|min:3|max:255',
+            'method' => ['required', Rule::in(['cash', 'original'])],
+            'restock' => 'nullable|boolean',
+            'approver_username' => 'nullable|string',
+            'approver_pin' => 'nullable|string',
+        ]);
+
+        $approver = ManagerApproval::resolve($request, $request->user());
+
+        // "original" = kembali lewat metode bayar awal (mis. transfer balik QRIS/EDC), dicatat sesuai metode tsb
+        $method = $validated['method'] === 'cash'
+            ? 'cash'
+            : ($order->payments()->where('status', 'paid')->latest('id')->value('method') ?? 'cash');
+
+        $refund = $this->orders->refundItems($order, $validated['items'], $validated['reason'], $method, (bool) ($validated['restock'] ?? false), $request->user(), $approver);
+
+        return response()->json([
+            'message' => 'Refund dicatat',
+            'data' => ['refund' => $refund, 'order' => $order->fresh(['items', 'refunds', 'payments'])],
+        ], 201);
+    }
+
     /** Batal pesanan. Pesanan lunas butuh manager atau PIN manager, dan refund dibuat otomatis. */
     public function cancel(Request $request, string $id)
     {

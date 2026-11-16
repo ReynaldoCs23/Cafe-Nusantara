@@ -5,7 +5,10 @@ import { EmptyState, Icon, LoadingBlock, Modal, Segmented, useToast } from '../.
 import { ConnectionDot } from '../../components/staff/StaffShell';
 import { useStaffOrders } from '../../hooks/useStaffOrders';
 import { apiErrorMessage, calculateTotals, formatPrice, modifierSummary, newIdempotencyKey } from '../../utils/pos';
-import { getPaperWidth, printReceipt, setPaperWidth } from '../../utils/print';
+import {
+    getAutoPrintKitchen, getAutoPrintReceipt, getPaperWidth, printAfterPayment, printKitchenTicket, printReceipt, setPaperWidth, setPrintFlags,
+} from '../../utils/print';
+import DiscountModal from '../../components/staff/DiscountModal';
 import { playChime } from '../../utils/sound';
 import ModifierSheet from './pos/ModifierSheet';
 import OrderListPanel from './pos/OrderListPanel';
@@ -16,14 +19,6 @@ const lineKey = (productId, modifiers, notes) =>
     `${productId}|${modifiers.map((m) => m.id).sort((a, b) => a - b).join('.')}|${notes}`;
 
 const unitPrice = (line) => line.product.price + line.modifiers.reduce((s, m) => s + m.price_delta, 0);
-
-const readAutoPrint = () => {
-    try {
-        return localStorage.getItem('cafe_auto_print') !== '0';
-    } catch {
-        return true;
-    }
-};
 
 /**
  * Layar kasir (PRD POS-01..11): menu di kiri, keranjang di kanan,
@@ -51,6 +46,8 @@ const Pos = () => {
     const [unpaid, setUnpaid] = useState([]);
     const [ready, setReady] = useState([]);
     const [busy, setBusy] = useState(false);
+    const [discount, setDiscount] = useState(null); // {type, value, reason, approver_username?, approver_pin?}
+    const [discountOpen, setDiscountOpen] = useState(false);
     const idempotencyKey = useRef(newIdempotencyKey());
     const searchRef = useRef(null);
 
@@ -87,7 +84,7 @@ const Pos = () => {
 
     const settings = menu?.settings;
     const subtotal = lines.reduce((s, l) => s + unitPrice(l) * l.quantity, 0);
-    const totals = calculateTotals(subtotal, settings);
+    const totals = calculateTotals(subtotal, settings, discount);
 
     const products = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -127,6 +124,7 @@ const Pos = () => {
         setOrderNotes('');
         setFulfillment('pickup');
         setTableId('');
+        setDiscount(null);
         idempotencyKey.current = newIdempotencyKey();
     };
 
@@ -143,6 +141,9 @@ const Pos = () => {
         fulfillment,
         dining_table_id: fulfillment === 'table' ? Number(tableId) : null,
         notes: orderNotes.trim() || null,
+        discount: discount ? { type: discount.type, value: discount.value, reason: discount.reason } : null,
+        approver_username: discount?.approver_username,
+        approver_pin: discount?.approver_pin,
         ...extra,
     });
 
@@ -157,8 +158,9 @@ const Pos = () => {
         setSuccess({ order, change });
         loadMenu().catch(() => {});
         loadQueues().catch(() => {});
-        if (order.payment_status === 'paid' && readAutoPrint()) {
-            printReceipt(order.id).catch(() => notify('Struk gagal dicetak. Coba cetak ulang.', 'error'));
+        // Pesanan "bayar nanti" belum dicetak: dapur baru membuat setelah lunas
+        if (order.payment_status === 'paid') {
+            printAfterPayment(order.id).catch(() => notify('Struk gagal dicetak. Coba cetak ulang.', 'error'));
         }
     };
 
@@ -223,7 +225,7 @@ const Pos = () => {
                     <OrderListPanel mode="unpaid" orders={unpaid} onChanged={loadQueues}
                         onPaid={(order) => {
                             notify(`Pesanan #${order.queue_number} lunas dan masuk antrean`);
-                            if (readAutoPrint()) printReceipt(order.id).catch(() => {});
+                            printAfterPayment(order.id).catch(() => {});
                         }} />
                 </div>
             )}
@@ -340,6 +342,15 @@ const Pos = () => {
                             <input className="input text-sm" value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Catatan pesanan (opsional)" maxLength={500} />
                             <div className="text-sm space-y-1">
                                 <div className="flex justify-between text-on-surface-variant"><span>Subtotal</span><span className="tabular">{formatPrice(totals.subtotal)}</span></div>
+                                {totals.discount > 0 ? (
+                                    <button className="w-full flex justify-between text-sage hover:underline underline-offset-4" onClick={() => setDiscountOpen(true)} title={discount?.reason}>
+                                        <span>Diskon{discount?.type === 'percent' ? ` ${discount.value}%` : ''}</span><span className="tabular">−{formatPrice(totals.discount)}</span>
+                                    </button>
+                                ) : lines.length > 0 && (
+                                    <button className="flex items-center gap-1 text-primary hover:underline underline-offset-4" onClick={() => setDiscountOpen(true)}>
+                                        <Icon name="sell" className="text-[16px]" /> Tambah diskon
+                                    </button>
+                                )}
                                 {totals.service > 0 && <div className="flex justify-between text-on-surface-variant"><span>Service</span><span className="tabular">{formatPrice(totals.service)}</span></div>}
                                 <div className="flex justify-between text-on-surface-variant"><span>PB1 {totals.taxRate}%</span><span className="tabular">{formatPrice(totals.tax)}</span></div>
                                 {totals.rounding !== 0 && <div className="flex justify-between text-on-surface-variant"><span>Pembulatan</span><span className="tabular">{formatPrice(totals.rounding)}</span></div>}
@@ -366,6 +377,12 @@ const Pos = () => {
                 </div>
             )}
 
+            {discountOpen && (
+                <DiscountModal subtotal={subtotal} current={discount} limitPercent={settings?.discount_approval_percent ?? 10}
+                    onClose={() => setDiscountOpen(false)}
+                    onApply={(spec) => { setDiscount(spec); setDiscountOpen(false); }} />
+            )}
+
             {sheetProduct && <ModifierSheet product={sheetProduct} onClose={() => setSheetProduct(null)} onAdd={addLine} />}
 
             {checkoutOpen && (
@@ -382,6 +399,9 @@ const Pos = () => {
                 <Modal title="Pesanan berhasil" onClose={() => setSuccess(null)} size="sm"
                     footer={
                         <>
+                            <button className="btn-ghost" onClick={() => printKitchenTicket(success.order.id).catch(() => notify('Tiket dapur gagal dicetak', 'error'))}>
+                                <Icon name="receipt" className="text-[18px]" /> Tiket dapur
+                            </button>
                             <button className="btn-outline" onClick={() => printReceipt(success.order.id).catch(() => notify('Struk gagal dicetak', 'error'))}>
                                 <Icon name="print" className="text-[18px]" /> Cetak struk
                             </button>
@@ -419,12 +439,13 @@ const Pos = () => {
 
 const PrinterSettings = ({ onClose }) => {
     const [paper, setPaper] = useState(getPaperWidth());
-    const [auto, setAuto] = useState(readAutoPrint());
+    const [auto, setAuto] = useState(getAutoPrintReceipt());
+    const [kitchen, setKitchen] = useState(getAutoPrintKitchen());
     return (
         <Modal title="Printer struk" subtitle="Pengaturan tersimpan di perangkat ini." onClose={onClose} size="sm"
             footer={<button className="btn-primary" onClick={() => {
                 setPaperWidth(paper);
-                try { localStorage.setItem('cafe_auto_print', auto ? '1' : '0'); } catch { /* abaikan */ }
+                setPrintFlags({ receipt: auto, kitchen });
                 onClose();
             }}>Simpan</button>}>
             <div className="space-y-5">
@@ -435,6 +456,10 @@ const PrinterSettings = ({ onClose }) => {
                 <label className="flex items-start gap-3">
                     <input type="checkbox" className="mt-1" checked={auto} onChange={(e) => setAuto(e.target.checked)} />
                     <span className="text-sm">Cetak struk otomatis setelah pembayaran</span>
+                </label>
+                <label className="flex items-start gap-3">
+                    <input type="checkbox" className="mt-1" checked={kitchen} onChange={(e) => setKitchen(e.target.checked)} />
+                    <span className="text-sm">Cetak tiket dapur otomatis <span className="block text-xs text-on-surface-variant">Cadangan jika layar bar/dapur mati atau internet terputus.</span></span>
                 </label>
                 <p className="text-xs text-on-surface-variant">
                     Saat dialog print muncul pertama kali, pilih printer thermal, atur margin “Tidak ada”, lalu nonaktifkan header/footer browser.

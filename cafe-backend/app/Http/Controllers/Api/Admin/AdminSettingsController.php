@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\Audit;
 use App\Support\StoreSettings;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -40,6 +41,7 @@ class AdminSettingsController extends Controller
             'kds_critical_minutes' => 'sometimes|required|integer|min:1|max:240',
             'ready_overdue_minutes' => 'sometimes|required|integer|min:1|max:120',
             'loyalty_enabled' => 'sometimes|required|boolean',
+            'discount_approval_percent' => 'sometimes|required|numeric|min:0|max:100',
         ];
 
         foreach (StoreSettings::DAYS as $day) {
@@ -59,7 +61,7 @@ class AdminSettingsController extends Controller
             ]])->all();
         }
 
-        foreach (['tax_rate', 'service_charge_rate'] as $key) {
+        foreach (['tax_rate', 'service_charge_rate', 'discount_approval_percent'] as $key) {
             if (isset($validated[$key])) {
                 $validated[$key] = $validated[$key] + 0; // simpan sebagai angka
             }
@@ -72,7 +74,18 @@ class AdminSettingsController extends Controller
             ], 422);
         }
 
+        $before = StoreSettings::all();
         StoreSettings::set($validated);
+
+        $changes = [];
+        foreach ($validated as $key => $value) {
+            if (($before[$key] ?? null) != $value) {
+                $changes[$key] = ['from' => $before[$key] ?? null, 'to' => $value];
+            }
+        }
+        if ($changes) {
+            Audit::log('settings.updated', null, 'Pengaturan toko: ' . implode(', ', array_keys($changes)), $changes);
+        }
 
         return response()->json([
             'message' => 'Pengaturan toko disimpan',

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -57,7 +58,9 @@ class AdminProductController extends Controller
         }
 
         unset($validated['image'], $validated['modifier_group_ids']);
+        $stockBefore = $product->stock_quantity;
         $product->update($validated);
+        $this->logStockAdjustment($product, $stockBefore);
         $this->syncModifierGroups($request, $product);
 
         return response()->json([
@@ -76,7 +79,9 @@ class AdminProductController extends Controller
             'stock_quantity' => 'sometimes|required|integer|min:0|max:100000',
         ]);
 
+        $stockBefore = $product->stock_quantity;
         $product->update($validated);
+        $this->logStockAdjustment($product, $stockBefore);
 
         return response()->json([
             'message' => $product->is_sold_out ? "{$product->name} ditandai habis" : "{$product->name} tersedia",
@@ -93,6 +98,16 @@ class AdminProductController extends Controller
         $product->delete();
 
         return response()->json(['message' => 'Produk berhasil dihapus']);
+    }
+
+    /** Koreksi stok manual dicatat di log aktivitas (pemotongan stok oleh pesanan tidak). */
+    private function logStockAdjustment(Product $product, int $before): void
+    {
+        if ($product->stock_quantity !== $before) {
+            Audit::log('product.stock_adjusted', $product, "{$product->name}: stok {$before} → {$product->stock_quantity}", [
+                'stock_quantity' => ['from' => $before, 'to' => $product->stock_quantity],
+            ]);
+        }
     }
 
     private function rules(?Product $product = null): array

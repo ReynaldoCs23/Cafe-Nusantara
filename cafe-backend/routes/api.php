@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AdminCategoryController;
+use App\Http\Controllers\Api\Admin\AuditLogController;
 use App\Http\Controllers\Api\Admin\AdminContentController;
 use App\Http\Controllers\Api\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\Admin\AdminModifierGroupController;
@@ -88,6 +89,8 @@ Route::prefix('v1/admin')->middleware('auth:sanctum')->group(function () {
     Route::middleware('role:owner,manager,cashier')->group(function () {
         Route::post('/orders/{id}/payments', [AdminOrderController::class, 'recordPayment']);
         Route::post('/orders/{id}/cancel', [AdminOrderController::class, 'cancel']);
+        Route::post('/orders/{id}/discount', [AdminOrderController::class, 'discount']);
+        Route::post('/orders/{id}/refunds', [AdminOrderController::class, 'refund']); // butuh manager/PIN manager
 
         Route::get('/pos/menu', [PosController::class, 'menu']);
         Route::post('/pos/orders', [PosController::class, 'store']);
@@ -128,6 +131,10 @@ Route::prefix('v1/admin')->middleware('auth:sanctum')->group(function () {
         Route::get('/dashboard-metrics', [AdminDashboardController::class, 'metrics']);
         Route::get('/reports', [ReportController::class, 'index']);
         Route::get('/reports/export', [ReportController::class, 'exportExcel']);
+        Route::get('/reports/products', [ReportController::class, 'products']);
+        Route::get('/reports/hourly', [ReportController::class, 'hourly']);
+        Route::get('/reports/exceptions', [ReportController::class, 'exceptions']);
+        Route::get('/audit-logs', [AuditLogController::class, 'index']);
 
         Route::apiResource('products', AdminProductController::class);
         Route::apiResource('categories', AdminCategoryController::class);

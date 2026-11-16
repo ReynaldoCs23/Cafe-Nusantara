@@ -9,7 +9,10 @@ import {
     CHANNELS, FULFILLMENTS, ORDER_STATUS, PAYMENT_METHODS, PAYMENT_STATUS,
     apiErrorMessage, formatDateTime, formatPrice, formatTime, localDateString, modifierSummary,
 } from '../../utils/pos';
-import { printReceipt } from '../../utils/print';
+import { printAfterPayment, printKitchenTicket, printReceipt } from '../../utils/print';
+import DiscountModal from '../../components/staff/DiscountModal';
+import RefundModal from '../../components/staff/RefundModal';
+import { useStoreSettings } from '../../hooks/useStoreSettings';
 
 const FILTERS = [
     { key: 'all', label: 'Semua', match: () => true },
@@ -49,6 +52,10 @@ const OrderManagement = () => {
     const [busy, setBusy] = useState(false);
     const [paying, setPaying] = useState(false);
     const [cancelling, setCancelling] = useState(false);
+    const [discounting, setDiscounting] = useState(false);
+    const [discountError, setDiscountError] = useState('');
+    const [refunding, setRefunding] = useState(false);
+    const storeSettings = useStoreSettings();
     const selectedRef = useRef(null);
 
     const loadOrders = useCallback(async () => {
@@ -195,6 +202,21 @@ const OrderManagement = () => {
                                             <Icon name="print" className="text-[18px]" /> Struk
                                         </button>
                                     )}
+                                    {canTakePayment && ['queued', 'preparing'].includes(selected.status) && (
+                                        <button className="btn-outline" onClick={() => printKitchenTicket(selected.id).catch(() => notify('Tiket dapur gagal dicetak', 'error'))}>
+                                            <Icon name="receipt" className="text-[18px]" /> Tiket dapur
+                                        </button>
+                                    )}
+                                    {canTakePayment && selected.status === 'pending_payment' && paidAmount === 0 && (
+                                        <button className="btn-outline" disabled={busy} onClick={() => { setDiscountError(''); setDiscounting(true); }}>
+                                            <Icon name="sell" className="text-[18px]" /> Diskon
+                                        </button>
+                                    )}
+                                    {canTakePayment && ['paid', 'partially_refunded'].includes(selected.payment_status) && selected.status !== 'cancelled' && (
+                                        <button className="btn-outline" disabled={busy || !detail} onClick={() => setRefunding(true)}>
+                                            <Icon name="currency_exchange" className="text-[18px]" /> Refund item
+                                        </button>
+                                    )}
                                     {selected.status === 'pending_payment' && canTakePayment && (
                                         <button className="btn-primary" disabled={busy} onClick={() => setPaying(true)}><Icon name="payments" className="text-[18px]" /> Terima pembayaran</button>
                                     )}
@@ -241,7 +263,10 @@ const OrderManagement = () => {
                                             <div className="flex gap-4">
                                                 <span className="font-semibold tabular w-8">{item.quantity}×</span>
                                                 <div>
-                                                    <p className="font-medium">{item.product_name}</p>
+                                                    <p className="font-medium">
+                                                        {item.product_name}
+                                                        {item.refunded_quantity > 0 && <span className="chip ml-2 border-error/30 text-error">{item.refunded_quantity} di-refund</span>}
+                                                    </p>
                                                     {item.modifiers?.length > 0 && <p className="text-xs text-on-surface-variant">{modifierSummary(item.modifiers)}</p>}
                                                     {item.notes && <p className="text-xs italic text-on-surface-variant">“{item.notes}”</p>}
                                                     <p className="text-xs text-on-surface-variant mt-0.5">{item.station === 'kitchen' ? 'Dapur' : 'Bar'} · {formatPrice(item.unit_price + (item.modifiers_total || 0))}/item</p>
@@ -295,7 +320,7 @@ const OrderManagement = () => {
 
                                 <section className="card p-6 space-y-2 text-sm self-start">
                                     <Money label="Subtotal" value={selected.subtotal} />
-                                    {selected.discount_total > 0 && <Money label="Diskon" value={-selected.discount_total} />}
+                                    {selected.discount_total > 0 && <Money label={`Diskon${selected.discount_reason ? ` · ${selected.discount_reason}` : ''}`} value={-selected.discount_total} />}
                                     {selected.service_charge > 0 && <Money label="Service charge" value={selected.service_charge} />}
                                     <Money label="Pajak" value={selected.tax_amount} />
                                     {selected.rounding !== 0 && <Money label="Pembulatan" value={selected.rounding} />}
@@ -319,7 +344,33 @@ const OrderManagement = () => {
                         setPaying(false);
                         notify('Pembayaran tercatat');
                         await refresh();
+                        printAfterPayment(selected.id).catch(() => {});
                     }} />
+            )}
+
+            {discounting && selected && (
+                <DiscountModal subtotal={selected.subtotal} limitPercent={storeSettings?.discount_approval_percent ?? 10} error={discountError} busy={busy}
+                    current={selected.discount_total > 0 ? { type: selected.discount_type, value: selected.discount_value, reason: selected.discount_reason } : null}
+                    onClose={() => setDiscounting(false)}
+                    onApply={async (spec) => {
+                        setBusy(true);
+                        setDiscountError('');
+                        try {
+                            await api.post(`/admin/orders/${selected.id}/discount`, spec || { type: 'none' });
+                            setDiscounting(false);
+                            notify(spec ? 'Diskon diterapkan' : 'Diskon dihapus');
+                            await refresh();
+                        } catch (err) {
+                            setDiscountError(apiErrorMessage(err, 'Gagal menerapkan diskon.'));
+                        } finally {
+                            setBusy(false);
+                        }
+                    }} />
+            )}
+
+            {refunding && detail && (
+                <RefundModal order={detail} onClose={() => setRefunding(false)}
+                    onDone={async () => { setRefunding(false); notify('Refund dicatat'); await refresh(); }} />
             )}
 
             {cancelling && selected && (

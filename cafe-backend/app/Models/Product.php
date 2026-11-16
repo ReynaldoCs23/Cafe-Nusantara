@@ -2,13 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Product extends Model
 {
     /** @use HasFactory<\Database\Factories\ProductFactory> */
-    use HasFactory;
+    use Auditable, HasFactory;
+
+    /** Stok terpotong otomatis oleh pesanan tidak dicatat; koreksi stok manual dicatat terpisah. */
+    public array $auditIgnore = ['stock_quantity'];
 
     public const STATIONS = ['bar', 'kitchen'];
 

@@ -138,6 +138,67 @@ export const printReceipt = async (orderId) => {
     printHtml(buildReceiptHtml(res.data.data));
 };
 
+/**
+ * Tiket dapur (PRD KDS-06): cadangan bila layar bar/dapur mati.
+ * Huruf besar, tanpa harga, dipisah per stasiun.
+ */
+export const buildKitchenTicketHtml = ({ store, order }, width = getPaperWidth()) => {
+    const tz = store.timezone;
+    const stations = [['bar', 'BAR'], ['kitchen', 'DAPUR']]
+        .map(([key, label]) => [label, order.items.filter((i) => i.station === key)])
+        .filter(([, items]) => items.length > 0);
+
+    const section = ([label, items]) => `
+        <div class="c b" style="margin-top:6px">— ${label} —</div>
+        ${items.map((item) => `
+            <div style="font-size:16px;font-weight:700;margin-top:4px">${item.quantity} x ${esc(item.product_name)}</div>
+            ${item.modifiers?.length ? `<div class="mod">${esc(modifierSummary(item.modifiers))}</div>` : ''}
+            ${item.notes ? `<div class="mod b">* ${esc(item.notes)}</div>` : ''}`).join('')}`;
+
+    return shell(`
+        <div class="c b">TIKET DAPUR</div>
+        <div class="c big">${esc(order.queue_number ?? '-')}</div>
+        <div class="c name">${esc(order.customer_name || 'Tamu')}</div>
+        <div class="c">${esc(order.dining_table ? `${order.dining_table.name} · antar ke meja` : FULFILLMENTS[order.fulfillment])}</div>
+        <div class="c">${dt(order.paid_at || order.created_at, tz)}</div>
+        <hr>
+        ${stations.map(section).join('<hr>')}
+        ${order.notes ? `<hr><div class="b">Catatan: ${esc(order.notes)}</div>` : ''}
+        <br>
+    `, width);
+};
+
+export const printKitchenTicket = async (orderId) => {
+    const res = await api.get(`/admin/pos/orders/${orderId}/receipt`);
+    printHtml(buildKitchenTicketHtml(res.data.data));
+};
+
+const readFlag = (key, fallback) => {
+    try {
+        const v = localStorage.getItem(key);
+        return v === null ? fallback : v === '1';
+    } catch {
+        return fallback;
+    }
+};
+
+export const getAutoPrintReceipt = () => readFlag('cafe_auto_print', true);
+export const getAutoPrintKitchen = () => readFlag('cafe_auto_print_kitchen', false);
+export const setPrintFlags = ({ receipt, kitchen }) => {
+    try {
+        localStorage.setItem('cafe_auto_print', receipt ? '1' : '0');
+        localStorage.setItem('cafe_auto_print_kitchen', kitchen ? '1' : '0');
+    } catch {
+        // abaikan
+    }
+};
+
+/** Cetak setelah pembayaran sesuai pengaturan perangkat: struk dan/atau tiket dapur. */
+export const printAfterPayment = async (orderId) => {
+    if (getAutoPrintReceipt()) await printReceipt(orderId);
+    if (getAutoPrintKitchen()) setTimeout(() => printKitchenTicket(orderId).catch(() => {}), getAutoPrintReceipt() ? 1800 : 0);
+};
+
 /** Cetak HTML lewat iframe tersembunyi agar halaman kasir tidak berpindah. */
 export const printHtml = (html, delayMs = 250) => {
     const frame = document.createElement('iframe');

@@ -60,9 +60,10 @@ export const modifierSummary = (modifiers) =>
     (modifiers || []).map((m) => (m.group ? `${m.group}: ${m.name}` : m.name)).join(' · ');
 
 /** Perkiraan total di sisi klien. Total final selalu dihitung ulang oleh server. */
-export const calculateTotals = (subtotal, settings) => {
+export const calculateTotals = (subtotal, settings, discountSpec = null) => {
     const s = settings || {};
-    const base = Math.max(0, subtotal);
+    const discount = discountAmount(subtotal, discountSpec);
+    const base = Math.max(0, subtotal - discount);
     const service = s.service_charge_enabled ? Math.round((base * Number(s.service_charge_rate || 0)) / 100) : 0;
     const taxable = base + service;
     const rate = Number(s.tax_rate ?? 10);
@@ -82,7 +83,14 @@ export const calculateTotals = (subtotal, settings) => {
         rounding = rounded - total;
         total = rounded;
     }
-    return { subtotal, service, tax, rounding, total, taxRate: rate, taxInclusive: !!s.tax_inclusive };
+    return { subtotal, discount, service, tax, rounding, total, taxRate: rate, taxInclusive: !!s.tax_inclusive };
+};
+
+/** Nominal diskon dari spesifikasi {type: 'percent'|'amount', value}. */
+export const discountAmount = (subtotal, spec) => {
+    if (!spec?.type || !spec.value) return 0;
+    if (spec.type === 'percent') return Math.round((subtotal * Math.min(100, Number(spec.value))) / 100);
+    return Math.min(Number(spec.value), subtotal);
 };
 
 export const apiErrorMessage = (err, fallback = 'Terjadi kesalahan. Coba lagi.') => {

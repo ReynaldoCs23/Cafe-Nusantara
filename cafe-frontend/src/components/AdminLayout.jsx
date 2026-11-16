@@ -23,6 +23,7 @@ const NAV = [
             { to: '/admin/dashboard', icon: 'space_dashboard', label: 'Ringkasan', roles: ['owner', 'manager'] },
             { to: '/admin/reports', icon: 'monitoring', label: 'Laporan', roles: ['owner', 'manager'] },
             { to: '/admin/shifts', icon: 'account_balance_wallet', label: 'Riwayat Shift', roles: ['owner', 'manager'] },
+            { to: '/admin/audit', icon: 'history', label: 'Log Aktivitas', roles: ['owner', 'manager'] },
         ],
     },
     {

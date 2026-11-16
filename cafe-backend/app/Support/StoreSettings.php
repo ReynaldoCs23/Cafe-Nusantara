@@ -51,6 +51,9 @@ class StoreSettings
         'kds_critical_minutes' => 15,
         'ready_overdue_minutes' => 10,
 
+        // Diskon manual di atas persentase ini (dari subtotal) butuh PIN manager (PRD PRM-01)
+        'discount_approval_percent' => 10,
+
         'loyalty_enabled' => false, // jawaban PRD Q7: fitur bisa dinonaktifkan
     ];
 
@@ -60,7 +63,7 @@ class StoreSettings
         'tax_rate', 'tax_inclusive', 'service_charge_enabled', 'service_charge_rate', 'rounding',
         'opening_hours', 'temporarily_closed',
         'pay_at_cashier_enabled', 'online_payment_enabled', 'loyalty_enabled',
-        'qr_payment_timeout_minutes',
+        'qr_payment_timeout_minutes', 'discount_approval_percent',
     ];
 
     public static function encode(mixed $value): string

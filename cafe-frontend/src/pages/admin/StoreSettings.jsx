@@ -152,6 +152,13 @@ const StoreSettings = () => {
                 </div>
             </Section>
 
+            <Section title="Kontrol kasir" description="Batas diskon manual yang boleh diberikan kasir tanpa persetujuan manager. Refund dan pembatalan pesanan lunas selalu butuh manager.">
+                <div className="grid md:grid-cols-3 gap-4">
+                    <NumberField label="Diskon tanpa PIN maks. (%)" value={settings.discount_approval_percent} onChange={(v) => set('discount_approval_percent', v)} min="0" max="100" step="1" required
+                        hint="0 = semua diskon butuh PIN manager" />
+                </div>
+            </Section>
+
             <Section title="Layar bar/dapur">
                 <div className="grid md:grid-cols-3 gap-4">
                     <NumberField label="Peringatan kuning (menit)" value={settings.kds_warning_minutes} onChange={(v) => set('kds_warning_minutes', v)} min="1" />

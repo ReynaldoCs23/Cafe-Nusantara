@@ -12,6 +12,7 @@ import Reports from './pages/admin/Reports';
 import StoreSettings from './pages/admin/StoreSettings';
 import TableManagement from './pages/admin/TableManagement';
 import ShiftHistory from './pages/admin/ShiftHistory';
+import AuditLog from './pages/admin/AuditLog';
 import StaffShell from './components/staff/StaffShell';
 import Pos from './pages/staff/Pos';
 import Kitchen from './pages/staff/Kitchen';
@@ -92,6 +93,7 @@ function App() {
                             <Route path="reviews" element={<ReviewsManagement />} />
                             <Route path="tables" element={<TableManagement />} />
                             <Route path="shifts" element={<ShiftHistory />} />
+                            <Route path="audit" element={<AuditLog />} />
                         </Route>
 
                         <Route element={<ProtectedRoute roles={['owner']} />}>

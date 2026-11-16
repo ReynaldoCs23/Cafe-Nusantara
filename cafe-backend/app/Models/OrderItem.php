@@ -11,7 +11,7 @@ class OrderItem extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_id', 'product_id', 'product_name', 'quantity', 'unit_price',
+        'order_id', 'product_id', 'product_name', 'quantity', 'refunded_quantity', 'unit_price',
         'modifiers', 'modifiers_total', 'line_total', 'notes', 'station', 'status',
         'started_at', 'ready_at', 'voided_at', 'voided_by', 'void_reason',
     ];
@@ -19,6 +19,7 @@ class OrderItem extends Model
     protected $casts = [
         'modifiers' => 'array',
         'quantity' => 'integer',
+        'refunded_quantity' => 'integer',
         'unit_price' => 'integer',
         'modifiers_total' => 'integer',
         'line_total' => 'integer',
@@ -35,5 +36,10 @@ class OrderItem extends Model
     public function product()
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function voider()
+    {
+        return $this->belongsTo(User::class, 'voided_by');
     }
 }

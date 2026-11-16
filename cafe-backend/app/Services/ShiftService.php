@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\Refund;
 use App\Models\Shift;
 use App\Models\User;
+use App\Support\Audit;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -25,12 +26,15 @@ class ShiftService
                 throw ValidationException::withMessages(['shift' => 'Anda masih punya shift yang terbuka.']);
             }
 
-            return Shift::create([
+            $shift = Shift::create([
                 'user_id' => $user->id,
                 'device_name' => $device,
                 'opened_at' => now(),
                 'opening_cash' => $openingCash,
             ]);
+            Audit::log('shift.opened', $shift, "Buka shift, modal Rp" . number_format($openingCash, 0, ',', '.'), null, $user);
+
+            return $shift;
         });
     }
 
@@ -41,6 +45,8 @@ class ShiftService
         if ($type === 'out' && $amount > $this->summary($shift)['expected_cash']) {
             throw ValidationException::withMessages(['amount' => 'Kas keluar melebihi uang di laci.']);
         }
+
+        Audit::log('shift.cash_' . $type, $shift, ($type === 'in' ? 'Kas masuk' : 'Kas keluar') . ' Rp' . number_format($amount, 0, ',', '.') . ": {$reason}", null, $user);
 
         return $shift->cashMovements()->create([
             'type' => $type,
@@ -114,6 +120,9 @@ class ShiftService
                 'summary' => $summary,
                 'notes' => $notes,
             ]);
+
+            $diff = $countedCash - $summary['expected_cash'];
+            Audit::log('shift.closed', $shift, 'Tutup shift, selisih kas ' . ($diff === 0 ? 'Rp0' : ($diff > 0 ? '+' : '-') . 'Rp' . number_format(abs($diff), 0, ',', '.')), null, $closer);
 
             return $shift;
         });

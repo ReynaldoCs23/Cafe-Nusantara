@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\Refund;
 use App\Models\Shift;
 use App\Models\User;
+use App\Support\Audit;
 use App\Support\DailyCounter;
 use App\Support\Realtime;
 use App\Support\StoreSettings;
@@ -69,7 +70,8 @@ class OrderService
         return DB::transaction(function () use ($data) {
             $lines = $this->buildLines($data['items']);
             $subtotal = array_sum(array_column($lines, 'line_total'));
-            $totals = OrderTotals::calculate($subtotal);
+            $discount = $this->resolveDiscount($subtotal, $data['discount'] ?? null);
+            $totals = OrderTotals::calculate($subtotal, $discount['amount']);
 
             $queueNumber = DailyCounter::next('queue');
             $today = StoreSettings::now()->format('Ymd');
@@ -93,9 +95,18 @@ class OrderService
                 'payment_status' => PaymentStatus::Unpaid,
                 'payment_due_at' => $data['payment_due_at'] ?? null,
                 'pickup_at' => $data['pickup_at'] ?? null,
+                'discount_type' => $discount['type'],
+                'discount_value' => $discount['value'],
+                'discount_reason' => $discount['reason'],
+                'discount_by' => $discount['by'],
             ]);
 
             $order->items()->createMany($lines);
+            if ($discount['amount'] > 0) {
+                Audit::log('order.discount', $order, "Diskon {$this->discountLabel($discount)} pada pesanan baru: {$discount['reason']}", [
+                    'discount_total' => ['from' => 0, 'to' => $totals['discount_total']],
+                ]);
+            }
             $this->log($order, null, OrderStatus::PendingPayment, $data['created_by'] ?? null);
 
             return $order;
@@ -356,6 +367,9 @@ class OrderService
             $order->save();
 
             $this->log($order, $from, OrderStatus::Cancelled, $actor?->id, $reason);
+            if ($actor) {
+                Audit::log('order.cancelled', $order, "Batal #{$order->queue_number}: {$reason}" . ($approver && $approver->id !== $actor->id ? " (disetujui {$approver->name})" : ''), null, $actor);
+            }
 
             return $order;
         });
@@ -489,6 +503,7 @@ class OrderService
             $subtotal = (int) $order->items()->where('status', '!=', 'voided')->sum('line_total');
             $order->fill(OrderTotals::calculate($subtotal, $order->discount_total))->save();
             $this->log($order, $order->status, $order->status, $actor->id, "Void {$item->quantity}x {$item->product_name}: {$reason}");
+            Audit::log('order.item_voided', $order, "Void {$item->quantity}x {$item->product_name} di #{$order->queue_number}: {$reason}", null, $actor);
 
             return $order;
         });
@@ -496,6 +511,187 @@ class OrderService
         Realtime::dispatch(new OrderStatusUpdated($order));
 
         return $order->load('items');
+    }
+
+    /**
+     * Diskon manual pada pesanan yang belum dibayar (PRD PRM-01). type "none" menghapus diskon.
+     */
+    public function applyDiscount(Order $order, array $spec, User $actor): Order
+    {
+        $order = DB::transaction(function () use ($order, $spec, $actor) {
+            $order = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if ($order->status !== OrderStatus::PendingPayment || $order->amountPaid() > 0) {
+                throw ValidationException::withMessages(['discount' => 'Diskon hanya bisa diberikan sebelum pesanan dibayar.']);
+            }
+
+            $subtotal = (int) $order->items()->where('status', '!=', 'voided')->sum('line_total');
+            $discount = $this->resolveDiscount($subtotal, ($spec['type'] ?? 'none') === 'none' ? null : [...$spec, 'actor' => $actor]);
+            $before = $order->discount_total;
+
+            $order->fill([
+                ...OrderTotals::calculate($subtotal, $discount['amount']),
+                'discount_type' => $discount['type'],
+                'discount_value' => $discount['value'],
+                'discount_reason' => $discount['reason'],
+                'discount_by' => $discount['by'],
+            ])->save();
+
+            Audit::log('order.discount', $order, $discount['amount'] > 0
+                ? "Diskon {$this->discountLabel($discount)} pada #{$order->queue_number}: {$discount['reason']}"
+                : "Diskon dihapus dari #{$order->queue_number}", ['discount_total' => ['from' => $before, 'to' => $order->discount_total]], $actor);
+
+            return $order;
+        });
+
+        Realtime::dispatch(new OrderStatusUpdated($order));
+
+        return $order->load('items');
+    }
+
+    /**
+     * Refund sebagian per item untuk pesanan yang sudah dibayar (PRD RFD-03).
+     * Nominal = harga item x jumlah, disesuaikan proporsional dengan diskon, service, dan pajak pesanan.
+     *
+     * @param  array<array{order_item_id:int, quantity:int}>  $lines
+     */
+    public function refundItems(Order $order, array $lines, string $reason, string $method, bool $restock, User $actor, User $approver): Refund
+    {
+        $refund = DB::transaction(function () use ($order, $lines, $reason, $method, $restock, $actor, $approver) {
+            $order = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if (! in_array($order->payment_status, [PaymentStatus::Paid, PaymentStatus::PartiallyRefunded], true)
+                || $order->status === OrderStatus::Cancelled) {
+                throw ValidationException::withMessages(['order' => 'Refund hanya untuk pesanan yang sudah dibayar.']);
+            }
+
+            $shift = null;
+            if ($method === 'cash') {
+                $shift = $this->openShiftFor($actor);
+                if (! $shift) {
+                    throw ValidationException::withMessages(['shift' => 'Refund tunai mengambil uang dari laci: buka shift terlebih dahulu.']);
+                }
+            }
+
+            $items = $order->items()->where('status', '!=', 'voided')->get()->keyBy('id');
+            $gross = 0;
+            $detail = [];
+
+            foreach ($lines as $index => $line) {
+                $item = $items->get((int) $line['order_item_id']);
+                $qty = (int) $line['quantity'];
+                if (! $item || $qty < 1) {
+                    throw ValidationException::withMessages(["items.{$index}" => 'Item tidak valid untuk pesanan ini.']);
+                }
+                $available = $item->quantity - $item->refunded_quantity;
+                if ($qty > $available) {
+                    throw ValidationException::withMessages(["items.{$index}" => "Maksimal {$available} {$item->product_name} yang bisa di-refund."]);
+                }
+
+                $unit = $item->unit_price + $item->modifiers_total;
+                $gross += $unit * $qty;
+                $detail[] = ['order_item_id' => $item->id, 'product_name' => $item->product_name, 'quantity' => $qty, 'unit_price' => $unit];
+
+                $item->increment('refunded_quantity', $qty);
+
+                if ($restock && $item->product_id) {
+                    $product = Product::whereKey($item->product_id)->lockForUpdate()->first();
+                    if ($product?->track_stock) {
+                        $product->increment('stock_quantity', $qty);
+                    }
+                }
+            }
+
+            if ($gross <= 0) {
+                throw ValidationException::withMessages(['items' => 'Pilih item yang akan di-refund.']);
+            }
+
+            $paid = $order->amountPaid();
+            $alreadyRefunded = $order->amountRefunded();
+            $ratio = $order->subtotal > 0 ? $order->grand_total / $order->subtotal : 1;
+            $amount = min((int) round($gross * $ratio), $paid - $alreadyRefunded);
+
+            if ($amount <= 0) {
+                throw ValidationException::withMessages(['items' => 'Tidak ada sisa pembayaran yang bisa di-refund.']);
+            }
+
+            $refund = Refund::create([
+                'order_id' => $order->id,
+                'shift_id' => $shift?->id,
+                'amount' => $amount,
+                'items' => $detail,
+                'restocked' => $restock,
+                'method' => $method,
+                'reason' => $reason,
+                'approved_by' => $approver->id,
+                'created_by' => $actor->id,
+            ]);
+
+            $order->payment_status = ($alreadyRefunded + $amount) >= $paid ? PaymentStatus::Refunded : PaymentStatus::PartiallyRefunded;
+            $order->save();
+
+            $summary = collect($detail)->map(fn ($d) => "{$d['quantity']}x {$d['product_name']}")->implode(', ');
+            $this->log($order, $order->status, $order->status, $actor->id, "Refund {$summary}: {$reason}");
+            Audit::log('order.refunded', $order, "Refund Rp" . number_format($amount, 0, ',', '.') . " #{$order->queue_number} ({$summary}): {$reason}"
+                . ($approver->id !== $actor->id ? " (disetujui {$approver->name})" : ''), null, $actor);
+
+            return $refund;
+        });
+
+        Realtime::dispatch(new OrderStatusUpdated($order->fresh()));
+
+        return $refund;
+    }
+
+    /**
+     * Hitung diskon & periksa batas persetujuan manager.
+     *
+     * @param  array{type:string, value:int|float, reason:string, actor:User, approver?:?User}|null  $spec
+     */
+    private function resolveDiscount(int $subtotal, ?array $spec): array
+    {
+        $none = ['amount' => 0, 'type' => null, 'value' => null, 'reason' => null, 'by' => null];
+        if (! $spec || ($spec['type'] ?? null) === null) {
+            return $none;
+        }
+
+        $type = $spec['type'];
+        $value = (int) $spec['value'];
+        if (! in_array($type, ['percent', 'amount'], true) || $value <= 0) {
+            throw ValidationException::withMessages(['discount' => 'Jenis atau nilai diskon tidak valid.']);
+        }
+        if (blank($spec['reason'] ?? null)) {
+            throw ValidationException::withMessages(['discount_reason' => 'Alasan diskon wajib diisi.']);
+        }
+        if ($type === 'percent' && $value > 100) {
+            throw ValidationException::withMessages(['discount' => 'Diskon persen maksimal 100%.']);
+        }
+
+        $amount = $type === 'percent' ? (int) round($subtotal * $value / 100) : min($value, $subtotal);
+        $percent = $subtotal > 0 ? $amount / $subtotal * 100 : 0;
+        $limit = (float) StoreSettings::get('discount_approval_percent');
+
+        /** @var User $actor */
+        $actor = $spec['actor'];
+        $approver = $spec['approver'] ?? null;
+        if ($percent > $limit && ! $actor->isManagerOrOwner() && ! $approver) {
+            throw ValidationException::withMessages(['approver_pin' => "Diskon di atas {$limit}% membutuhkan PIN manager."]);
+        }
+
+        return [
+            'amount' => $amount,
+            'type' => $type,
+            'value' => $value,
+            'reason' => trim($spec['reason']),
+            'by' => ($approver ?? $actor)->id,
+        ];
+    }
+
+    private function discountLabel(array $discount): string
+    {
+        return $discount['type'] === 'percent'
+            ? "{$discount['value']}% (Rp" . number_format($discount['amount'], 0, ',', '.') . ')'
+            : 'Rp' . number_format($discount['amount'], 0, ',', '.');
     }
 
     public function openShiftFor(User $user): ?Shift

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\Role;
+use App\Models\Concerns\Auditable;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -17,7 +18,9 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use Auditable, HasApiTokens, HasFactory, Notifiable;
+
+    public array $auditIgnore = ['remember_token', 'email_verified_at'];
 
     protected $appends = ['is_staff', 'has_pin'];
 

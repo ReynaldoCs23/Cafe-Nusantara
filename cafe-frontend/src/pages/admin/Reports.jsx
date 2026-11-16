@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import api from '../../api/axios';
 import { EmptyState, Icon, LoadingBlock, PageHeader, StatCard, StatusBadge, useToast } from '../../components/ui';
 import { CHANNELS, PAYMENT_METHODS, apiErrorMessage, formatDateTime, formatPrice, localDateString } from '../../utils/pos';
+import { ExceptionsTab, HourlyTab, ProductsTab } from './reports/InsightTabs';
 
 const presets = () => {
     const today = new Date();
@@ -45,6 +46,7 @@ const Reports = () => {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [downloading, setDownloading] = useState(false);
+    const [tab, setTab] = useState('summary');
 
     const load = useCallback(async (start, end) => {
         setLoading(true);
@@ -106,7 +108,20 @@ const Reports = () => {
                 </div>
             </div>
 
-            {!s ? <LoadingBlock label="Menghitung laporan..." /> : (
+            <div className="flex gap-1.5 mb-8 border-b border-hairline">
+                {[['summary', 'Ringkasan'], ['products', 'Produk'], ['hourly', 'Jam ramai'], ['exceptions', 'Pembatalan & refund']].map(([key, label]) => (
+                    <button key={key} onClick={() => setTab(key)}
+                        className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === key ? 'border-primary text-ink' : 'border-transparent text-on-surface-variant hover:text-ink'}`}>
+                        {label}
+                    </button>
+                ))}
+            </div>
+
+            {tab === 'products' && <ProductsTab range={range} />}
+            {tab === 'hourly' && <HourlyTab range={range} />}
+            {tab === 'exceptions' && <ExceptionsTab range={range} />}
+
+            {tab === 'summary' && (!s ? <LoadingBlock label="Menghitung laporan..." /> : (
                 <div className={loading ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
                         <StatCard label="Pendapatan bersih" value={formatPrice(s.net_revenue)} tone="primary" icon="payments" hint={s.refunds_total ? `Setelah refund ${formatPrice(s.refunds_total)}` : 'Tanpa refund'} />
@@ -168,7 +183,7 @@ const Reports = () => {
                         )}
                     </section>
                 </div>
-            )}
+            ))}
         </div>
     );
 };

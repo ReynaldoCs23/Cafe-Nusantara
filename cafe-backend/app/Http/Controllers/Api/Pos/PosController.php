@@ -10,6 +10,7 @@ use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Services\OrderService;
+use App\Support\ManagerApproval;
 use App\Support\StoreSettings;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -61,9 +62,24 @@ class PosController extends Controller
             'payments.*.amount' => 'required|integer|min:1',
             'payments.*.tendered' => 'nullable|integer|min:0',
             'payments.*.reference' => 'nullable|string|max:100',
+            'discount' => 'nullable|array',
+            'discount.type' => 'required_with:discount|in:percent,amount',
+            'discount.value' => 'required_with:discount|integer|min:1',
+            'discount.reason' => 'required_with:discount|string|min:3|max:255',
+            'approver_username' => 'nullable|string',
+            'approver_pin' => 'nullable|string',
         ]);
 
         $key = $request->header('Idempotency-Key');
+
+        $discount = null;
+        if (! empty($validated['discount'])) {
+            $discount = [
+                ...$validated['discount'],
+                'actor' => $request->user(),
+                'approver' => $request->filled('approver_pin') ? ManagerApproval::resolve($request, $request->user()) : null,
+            ];
+        }
 
         $order = $this->orders->createPosOrder([
             'fulfillment' => $validated['fulfillment'],
@@ -72,6 +88,7 @@ class PosController extends Controller
             'customer_name' => trim($validated['customer_name']),
             'customer_phone' => $validated['customer_phone'] ?? null,
             'notes' => $validated['notes'] ?? null,
+            'discount' => $discount,
             'idempotency_key' => is_string($key) && preg_match('/^[A-Za-z0-9\-_]{8,100}$/', $key) ? $key : null,
         ], $validated['payments'] ?? [], $request->user(), (bool) ($validated['pay_later'] ?? false));
 
