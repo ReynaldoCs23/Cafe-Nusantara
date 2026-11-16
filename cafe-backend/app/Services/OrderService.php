@@ -11,6 +11,7 @@ use App\Models\OrderItem;
 use App\Models\OrderStatusLog;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\Promotion;
 use App\Models\Refund;
 use App\Models\Shift;
 use App\Models\User;
@@ -30,6 +31,10 @@ use Illuminate\Validation\ValidationException;
  */
 class OrderService
 {
+    public function __construct(private PromotionEngine $promotions, private LoyaltyService $loyalty)
+    {
+    }
+
     /**
      * @param  array{
      *     channel: string, fulfillment: string, items: array,
@@ -71,7 +76,16 @@ class OrderService
             $lines = $this->buildLines($data['items']);
             $subtotal = array_sum(array_column($lines, 'line_total'));
             $discount = $this->resolveDiscount($subtotal, $data['discount'] ?? null);
-            $totals = OrderTotals::calculate($subtotal, $discount['amount']);
+            $member = ! empty($data['user_id']) ? User::find($data['user_id']) : null;
+            $pricing = $this->price($lines, [
+                'channel' => $data['channel'],
+                'voucher_code' => $data['voucher_code'] ?? null,
+                'manual' => $discount['type'] ? ['type' => $discount['type'], 'value' => $discount['value']] : null,
+                'points' => (int) ($data['redeem_points'] ?? 0),
+                'user' => $member,
+            ]);
+            $totals = $pricing['totals'];
+            $promotion = $pricing['promotion'];
 
             $queueNumber = DailyCounter::next('queue');
             $today = StoreSettings::now()->format('Ymd');
@@ -99,12 +113,31 @@ class OrderService
                 'discount_value' => $discount['value'],
                 'discount_reason' => $discount['reason'],
                 'discount_by' => $discount['by'],
+                'manual_discount' => $pricing['manual_discount'],
+                'promotion_id' => $promotion?->id,
+                'promotion_name' => $promotion?->name,
+                'voucher_code' => $promotion?->code,
+                'promo_discount' => $pricing['promo_discount'],
+                'points_redeemed' => $pricing['points_redeemed'],
+                'points_discount' => $pricing['points_discount'],
             ]);
 
             $order->items()->createMany($lines);
+
+            if ($promotion) {
+                // Kunci baris promo agar kuota tidak terlampaui oleh pesanan bersamaan
+                $locked = Promotion::whereKey($promotion->id)->lockForUpdate()->first();
+                if ($locked->quota !== null && $locked->used_count >= $locked->quota) {
+                    throw ValidationException::withMessages(['voucher_code' => 'Kuota promo sudah habis.']);
+                }
+                $locked->increment('used_count');
+            }
+            if ($pricing['points_redeemed'] > 0) {
+                $this->loyalty->redeem($member, $pricing['points_redeemed'], $order, isset($data['created_by']) ? User::find($data['created_by']) : null);
+            }
             if ($discount['amount'] > 0) {
                 Audit::log('order.discount', $order, "Diskon {$this->discountLabel($discount)} pada pesanan baru: {$discount['reason']}", [
-                    'discount_total' => ['from' => 0, 'to' => $totals['discount_total']],
+                    'manual_discount' => ['from' => 0, 'to' => $pricing['manual_discount']],
                 ]);
             }
             $this->log($order, null, OrderStatus::PendingPayment, $data['created_by'] ?? null);
@@ -361,6 +394,12 @@ class OrderService
                 'void_reason' => $reason,
             ]);
 
+            $this->loyalty->revertEarned($order, $order->points_earned, "Batal #{$order->queue_number}", $actor);
+            $this->loyalty->refundRedeemed($order, $order->points_redeemed, "Poin dikembalikan, batal #{$order->queue_number}", $actor);
+            if ($order->promotion_id) {
+                Promotion::whereKey($order->promotion_id)->where('used_count', '>', 0)->decrement('used_count');
+            }
+
             $order->status = OrderStatus::Cancelled;
             $order->cancelled_at = now();
             $order->cancel_reason = $reason;
@@ -500,8 +539,7 @@ class OrderService
                 'void_reason' => $reason,
             ]);
 
-            $subtotal = (int) $order->items()->where('status', '!=', 'voided')->sum('line_total');
-            $order->fill(OrderTotals::calculate($subtotal, $order->discount_total))->save();
+            $this->reprice($order, $actor);
             $this->log($order, $order->status, $order->status, $actor->id, "Void {$item->quantity}x {$item->product_name}: {$reason}");
             Audit::log('order.item_voided', $order, "Void {$item->quantity}x {$item->product_name} di #{$order->queue_number}: {$reason}", null, $actor);
 
@@ -530,12 +568,12 @@ class OrderService
             $before = $order->discount_total;
 
             $order->fill([
-                ...OrderTotals::calculate($subtotal, $discount['amount']),
                 'discount_type' => $discount['type'],
                 'discount_value' => $discount['value'],
                 'discount_reason' => $discount['reason'],
                 'discount_by' => $discount['by'],
-            ])->save();
+            ]);
+            $this->reprice($order, $actor);
 
             Audit::log('order.discount', $order, $discount['amount'] > 0
                 ? "Diskon {$this->discountLabel($discount)} pada #{$order->queue_number}: {$discount['reason']}"
@@ -630,6 +668,9 @@ class OrderService
             $order->payment_status = ($alreadyRefunded + $amount) >= $paid ? PaymentStatus::Refunded : PaymentStatus::PartiallyRefunded;
             $order->save();
 
+            $perPoint = max(1, (int) StoreSettings::get('loyalty_earn_amount'));
+            $this->loyalty->revertEarned($order, $order->payment_status === PaymentStatus::Refunded ? $order->points_earned : intdiv($amount, $perPoint), "Refund #{$order->queue_number}", $actor);
+
             $summary = collect($detail)->map(fn ($d) => "{$d['quantity']}x {$d['product_name']}")->implode(', ');
             $this->log($order, $order->status, $order->status, $actor->id, "Refund {$summary}: {$reason}");
             Audit::log('order.refunded', $order, "Refund Rp" . number_format($amount, 0, ',', '.') . " #{$order->queue_number} ({$summary}): {$reason}"
@@ -694,6 +735,125 @@ class OrderService
             : 'Rp' . number_format($discount['amount'], 0, ',', '.');
     }
 
+    /**
+     * Perkiraan total sebelum pesanan dikirim (keranjang pelanggan & kasir):
+     * promo otomatis/voucher, diskon manual, dan tukar poin. Tidak memotong stok atau poin.
+     */
+    public function quote(array $data): array
+    {
+        $lines = $this->buildLines($data['items'], false);
+        $subtotal = array_sum(array_column($lines, 'line_total'));
+        $discount = $this->resolveDiscount($subtotal, $data['discount'] ?? null);
+        $member = ! empty($data['user_id']) ? User::find($data['user_id']) : null;
+
+        $pricing = $this->price($lines, [
+            'channel' => $data['channel'],
+            'voucher_code' => $data['voucher_code'] ?? null,
+            'manual' => $discount['type'] ? ['type' => $discount['type'], 'value' => $discount['value']] : null,
+            'points' => (int) ($data['redeem_points'] ?? 0),
+            'user' => $member,
+        ]);
+
+        return [
+            ...$pricing['totals'],
+            'manual_discount' => $pricing['manual_discount'],
+            'promo_discount' => $pricing['promo_discount'],
+            'promotion' => $pricing['promotion']?->only(['id', 'name', 'summary', 'is_voucher', 'code']),
+            'points_redeemed' => $pricing['points_redeemed'],
+            'points_discount' => $pricing['points_discount'],
+            'member' => $member ? ['id' => $member->id, 'name' => $member->name, 'loyalty_points' => $member->loyalty_points] : null,
+            'points_to_earn' => $this->loyalty->enabled() && $this->loyalty->eligible($member)
+                ? intdiv($pricing['totals']['grand_total'], max(1, (int) StoreSettings::get('loyalty_earn_amount')))
+                : 0,
+        ];
+    }
+
+    /**
+     * Perhitungan harga terpusat. Urutan potongan: promo -> diskon manual -> tukar poin (dibatasi persen maksimal).
+     * Dengan 'promotion_id' di $ctx, promo dikunci ke promo yang sudah tercatat (hitung ulang pesanan).
+     */
+    private function price(array $lines, array $ctx): array
+    {
+        $subtotal = (int) array_sum(array_column($lines, 'line_total'));
+        $categories = Product::whereIn('id', array_filter(array_column($lines, 'product_id')))->pluck('category_id', 'id');
+
+        $promoLines = array_map(fn ($line) => [
+            'product_id' => $line['product_id'],
+            'category_id' => $categories[$line['product_id']] ?? null,
+            'quantity' => (int) $line['quantity'],
+            'unit_total' => intdiv((int) $line['line_total'], max(1, (int) $line['quantity'])),
+            'line_total' => (int) $line['line_total'],
+        ], $lines);
+
+        if (array_key_exists('promotion_id', $ctx)) {
+            $promotion = $ctx['promotion_id'] ? Promotion::find($ctx['promotion_id']) : null;
+            $promoAmount = 0;
+            if ($promotion) {
+                $result = $this->promotions->evaluate($promotion, $promoLines, $ctx['channel'], null, true);
+                $promoAmount = $result['eligible'] ? $result['amount'] : 0;
+                $promotion = $result['eligible'] ? $promotion : null;
+            }
+        } else {
+            ['promotion' => $promotion, 'amount' => $promoAmount] = $this->promotions->best($promoLines, $ctx['channel'], $ctx['voucher_code'] ?? null);
+        }
+
+        $manual = 0;
+        if ($spec = $ctx['manual'] ?? null) {
+            $manual = $spec['type'] === 'percent'
+                ? (int) round($subtotal * min(100, (int) $spec['value']) / 100)
+                : min((int) $spec['value'], $subtotal);
+        }
+
+        $remaining = max(0, $subtotal - $promoAmount - $manual);
+        [$points, $pointsValue] = $this->loyalty->redemptionFor($ctx['user'] ?? null, (int) ($ctx['points'] ?? 0), $remaining, (bool) ($ctx['points_fixed'] ?? false));
+
+        return [
+            'totals' => OrderTotals::calculate($subtotal, min($subtotal, $promoAmount + $manual + $pointsValue)),
+            'promotion' => $promotion,
+            'promo_discount' => $promoAmount,
+            'manual_discount' => min($manual, max(0, $subtotal - $promoAmount)),
+            'points_redeemed' => $points,
+            'points_discount' => $pointsValue,
+        ];
+    }
+
+    /** Hitung ulang total pesanan (setelah void item / ubah diskon) dengan promo & poin yang sudah tercatat. */
+    private function reprice(Order $order, ?User $actor = null): void
+    {
+        $lines = $order->items()->where('status', '!=', 'voided')->get()
+            ->map(fn ($item) => ['product_id' => $item->product_id, 'quantity' => $item->quantity, 'line_total' => $item->line_total])
+            ->all();
+
+        $pricing = $this->price($lines, [
+            'channel' => $order->channel,
+            'promotion_id' => $order->promotion_id,
+            'manual' => $order->discount_type ? ['type' => $order->discount_type, 'value' => $order->discount_value] : null,
+            'points' => $order->points_redeemed,
+            'points_fixed' => true,
+            'user' => $order->user,
+        ]);
+
+        $returned = $order->points_redeemed - $pricing['points_redeemed'];
+        if ($returned > 0) {
+            $this->loyalty->refundRedeemed($order, $returned, "Penyesuaian poin #{$order->queue_number}", $actor);
+        }
+        if ($order->promotion_id && ! $pricing['promotion']) {
+            // Promo tidak lagi memenuhi syarat (mis. item di-void): lepas promo & kembalikan kuota
+            Promotion::whereKey($order->promotion_id)->where('used_count', '>', 0)->decrement('used_count');
+        }
+
+        $order->fill([
+            ...$pricing['totals'],
+            'manual_discount' => $pricing['manual_discount'],
+            'promo_discount' => $pricing['promo_discount'],
+            'promotion_id' => $pricing['promotion']?->id,
+            'promotion_name' => $pricing['promotion']?->name,
+            'voucher_code' => $pricing['promotion']?->code,
+            'points_redeemed' => $pricing['points_redeemed'],
+            'points_discount' => $pricing['points_discount'],
+        ])->save();
+    }
+
     public function openShiftFor(User $user): ?Shift
     {
         return Shift::where('user_id', $user->id)->whereNull('closed_at')->latest('id')->first();
@@ -715,6 +875,7 @@ class OrderService
         $order->paid_at = now();
         $order->status = OrderStatus::Queued;
         $order->save();
+        $this->loyalty->earnFor($order);
 
         $this->log($order, OrderStatus::PendingPayment, OrderStatus::Queued, $actorId, 'Pembayaran lunas');
     }
@@ -722,13 +883,13 @@ class OrderService
     /**
      * Validasi item, modifier, ketersediaan, dan potong stok dengan penguncian baris.
      */
-    private function buildLines(array $items): array
+    private function buildLines(array $items, bool $reserve = true): array
     {
         $productIds = array_unique(array_map(fn ($item) => (int) $item['product_id'], $items));
 
         $products = Product::with('modifierGroups.modifiers')
             ->whereIn('id', $productIds)
-            ->lockForUpdate()
+            ->when($reserve, fn ($q) => $q->lockForUpdate())
             ->get()
             ->keyBy('id');
 
@@ -765,10 +926,12 @@ class OrderService
             ];
         }
 
-        foreach ($requestedQty as $productId => $qty) {
-            $product = $products->get($productId);
-            if ($product->track_stock) {
-                $product->decrement('stock_quantity', $qty);
+        if ($reserve) {
+            foreach ($requestedQty as $productId => $qty) {
+                $product = $products->get($productId);
+                if ($product->track_stock) {
+                    $product->decrement('stock_quantity', $qty);
+                }
             }
         }
 

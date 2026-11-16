@@ -5,6 +5,7 @@ import { useAuth, landingPathFor } from '../context/AuthContext';
 import { Icon } from './ui';
 import Footer from './Footer';
 import TableBanner from './public/TableBanner';
+import OrderTracker from './public/OrderTracker';
 import { useTableSession } from '../hooks/useTableSession';
 
 const LINKS = [
@@ -132,6 +133,7 @@ const PublicLayout = () => {
             </main>
 
             <Footer />
+            <OrderTracker />
         </div>
     );
 };

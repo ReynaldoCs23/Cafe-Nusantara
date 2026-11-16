@@ -9,6 +9,8 @@ import {
     getAutoPrintKitchen, getAutoPrintReceipt, getPaperWidth, printAfterPayment, printKitchenTicket, printReceipt, setPaperWidth, setPrintFlags,
 } from '../../utils/print';
 import DiscountModal from '../../components/staff/DiscountModal';
+import MemberModal from './pos/MemberModal';
+import { useQuote } from '../../hooks/useQuote';
 import { playChime } from '../../utils/sound';
 import ModifierSheet from './pos/ModifierSheet';
 import OrderListPanel from './pos/OrderListPanel';
@@ -48,6 +50,11 @@ const Pos = () => {
     const [busy, setBusy] = useState(false);
     const [discount, setDiscount] = useState(null); // {type, value, reason, approver_username?, approver_pin?}
     const [discountOpen, setDiscountOpen] = useState(false);
+    const [member, setMember] = useState(null); // {id, name, phone_number, loyalty_points}
+    const [memberOpen, setMemberOpen] = useState(false);
+    const [voucher, setVoucher] = useState('');
+    const [voucherInput, setVoucherInput] = useState('');
+    const [redeemPoints, setRedeemPoints] = useState(0);
     const idempotencyKey = useRef(newIdempotencyKey());
     const searchRef = useRef(null);
 
@@ -85,6 +92,20 @@ const Pos = () => {
     const settings = menu?.settings;
     const subtotal = lines.reduce((s, l) => s + unitPrice(l) * l.quantity, 0);
     const totals = calculateTotals(subtotal, settings, discount);
+
+    // Total final dari server: promo otomatis, voucher, diskon manual, dan tukar poin member
+    const quotePayload = useMemo(() => ({
+        items: lines.map((l) => ({ product_id: l.product.id, quantity: l.quantity, modifier_ids: l.modifiers.map((m) => m.id) })),
+        member_id: member?.id,
+        voucher_code: voucher || undefined,
+        redeem_points: redeemPoints || undefined,
+        discount: discount ? { type: discount.type, value: discount.value } : undefined,
+    }), [lines, member, voucher, redeemPoints, discount]);
+    const { quote, error: quoteError, fieldErrors: quoteFieldErrors, loading: quoting } = useQuote('/admin/pos/quote', quotePayload, lines.length > 0);
+    const shown = quote
+        ? { subtotal: quote.subtotal, manual: quote.manual_discount, promo: quote.promo_discount, points: quote.points_discount, service: quote.service_charge, tax: quote.tax_amount, rounding: quote.rounding, total: quote.grand_total }
+        : { subtotal: totals.subtotal, manual: totals.discount, promo: 0, points: 0, service: totals.service, tax: totals.tax, rounding: totals.rounding, total: totals.total };
+    const loyaltyOn = !!settings?.loyalty_enabled;
 
     const products = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -125,6 +146,10 @@ const Pos = () => {
         setFulfillment('pickup');
         setTableId('');
         setDiscount(null);
+        setMember(null);
+        setVoucher('');
+        setVoucherInput('');
+        setRedeemPoints(0);
         idempotencyKey.current = newIdempotencyKey();
     };
 
@@ -142,12 +167,16 @@ const Pos = () => {
         dining_table_id: fulfillment === 'table' ? Number(tableId) : null,
         notes: orderNotes.trim() || null,
         discount: discount ? { type: discount.type, value: discount.value, reason: discount.reason } : null,
+        member_id: member?.id || null,
+        voucher_code: voucher || null,
+        redeem_points: redeemPoints || 0,
         approver_username: discount?.approver_username,
         approver_pin: discount?.approver_pin,
         ...extra,
     });
 
     const startCheckout = () => {
+        if (quoteError) return notify(quoteError, 'error');
         const problem = validateOrder();
         if (problem) return notify(problem, 'error');
         setCheckoutOpen(true);
@@ -293,7 +322,20 @@ const Pos = () => {
                     {/* Keranjang */}
                     <aside className="flex flex-col min-h-0 border-l border-hairline bg-paper">
                         <div className="p-5 space-y-3 border-b border-hairline">
-                            <input className="input-lg" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Nama pelanggan" maxLength={100} />
+                            <div className="flex gap-2">
+                                <input className="input-lg" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Nama pelanggan" maxLength={100} />
+                                {loyaltyOn && (
+                                    <button className={`btn-outline shrink-0 ${member ? 'border-sage text-sage' : ''}`} onClick={() => setMemberOpen(true)} title="Pilih member">
+                                        <Icon name={member ? 'loyalty' : 'person_search'} className="text-[20px]" />
+                                    </button>
+                                )}
+                            </div>
+                            {member && (
+                                <div className="flex items-center justify-between rounded-xl bg-sage-soft px-4 py-2.5 text-sm">
+                                    <span className="text-sage"><strong className="font-semibold">{member.name}</strong> · {member.loyalty_points} poin</span>
+                                    <button className="text-on-surface-variant hover:text-error" onClick={() => { setMember(null); setRedeemPoints(0); }} aria-label="Lepas member"><Icon name="close" className="text-[18px]" /></button>
+                                </div>
+                            )}
                             <div className="flex items-center gap-3">
                                 <Segmented value={fulfillment} onChange={setFulfillment} options={[['pickup', 'Ambil di kasir', 'shopping_bag'], ['table', 'Antar ke meja', 'table_restaurant']]} />
                             </div>
@@ -341,30 +383,62 @@ const Pos = () => {
                         <div className="border-t border-hairline p-5 space-y-3 bg-cream">
                             <input className="input text-sm" value={orderNotes} onChange={(e) => setOrderNotes(e.target.value)} placeholder="Catatan pesanan (opsional)" maxLength={500} />
                             <div className="text-sm space-y-1">
-                                <div className="flex justify-between text-on-surface-variant"><span>Subtotal</span><span className="tabular">{formatPrice(totals.subtotal)}</span></div>
-                                {totals.discount > 0 ? (
+                                <div className="flex justify-between text-on-surface-variant"><span>Subtotal</span><span className="tabular">{formatPrice(shown.subtotal)}</span></div>
+                                {shown.promo > 0 && (
+                                    <div className="flex justify-between text-sage"><span className="truncate pr-2">{quote?.promotion?.is_voucher ? 'Voucher' : 'Promo'} · {quote?.promotion?.name}</span><span className="tabular">−{formatPrice(shown.promo)}</span></div>
+                                )}
+                                {shown.manual > 0 ? (
                                     <button className="w-full flex justify-between text-sage hover:underline underline-offset-4" onClick={() => setDiscountOpen(true)} title={discount?.reason}>
-                                        <span>Diskon{discount?.type === 'percent' ? ` ${discount.value}%` : ''}</span><span className="tabular">−{formatPrice(totals.discount)}</span>
+                                        <span>Diskon{discount?.type === 'percent' ? ` ${discount.value}%` : ''}</span><span className="tabular">−{formatPrice(shown.manual)}</span>
                                     </button>
                                 ) : lines.length > 0 && (
                                     <button className="flex items-center gap-1 text-primary hover:underline underline-offset-4" onClick={() => setDiscountOpen(true)}>
                                         <Icon name="sell" className="text-[16px]" /> Tambah diskon
                                     </button>
                                 )}
-                                {totals.service > 0 && <div className="flex justify-between text-on-surface-variant"><span>Service</span><span className="tabular">{formatPrice(totals.service)}</span></div>}
-                                <div className="flex justify-between text-on-surface-variant"><span>PB1 {totals.taxRate}%</span><span className="tabular">{formatPrice(totals.tax)}</span></div>
-                                {totals.rounding !== 0 && <div className="flex justify-between text-on-surface-variant"><span>Pembulatan</span><span className="tabular">{formatPrice(totals.rounding)}</span></div>}
+                                {shown.points > 0 && (
+                                    <div className="flex justify-between text-sage"><span>Tukar {quote?.points_redeemed} poin</span><span className="tabular">−{formatPrice(shown.points)}</span></div>
+                                )}
+                                {shown.service > 0 && <div className="flex justify-between text-on-surface-variant"><span>Service</span><span className="tabular">{formatPrice(shown.service)}</span></div>}
+                                <div className="flex justify-between text-on-surface-variant"><span>PB1 {totals.taxRate}%</span><span className="tabular">{formatPrice(shown.tax)}</span></div>
+                                {shown.rounding !== 0 && <div className="flex justify-between text-on-surface-variant"><span>Pembulatan</span><span className="tabular">{formatPrice(shown.rounding)}</span></div>}
                             </div>
+
+                            {lines.length > 0 && (
+                                <div className="space-y-2">
+                                    {voucher ? (
+                                        <div className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${quoteFieldErrors.voucher_code ? 'border-error/40 text-error' : 'border-sage/40 text-sage'}`}>
+                                            <span className="flex items-center gap-2"><Icon name="confirmation_number" className="text-[18px]" /> {voucher}</span>
+                                            <button onClick={() => { setVoucher(''); setVoucherInput(''); }} aria-label="Hapus voucher"><Icon name="close" className="text-[18px]" /></button>
+                                        </div>
+                                    ) : (
+                                        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); setVoucher(voucherInput.trim().toUpperCase()); }}>
+                                            <input className="input py-2 text-sm uppercase" value={voucherInput} onChange={(e) => setVoucherInput(e.target.value)} placeholder="Kode voucher" maxLength={40} />
+                                            <button className="btn-outline py-2 text-sm" disabled={!voucherInput.trim()}>Pakai</button>
+                                        </form>
+                                    )}
+                                    {quoteFieldErrors.voucher_code && <p className="text-xs text-error">{quoteFieldErrors.voucher_code[0]}</p>}
+                                    {loyaltyOn && member && member.loyalty_points >= (settings?.loyalty_min_redeem ?? 0) && (
+                                        <label className="flex items-center justify-between gap-3 text-sm">
+                                            <span className="flex items-center gap-2"><input type="checkbox" checked={redeemPoints > 0} onChange={(e) => setRedeemPoints(e.target.checked ? member.loyalty_points : 0)} /> Pakai poin member</span>
+                                            <span className="text-xs text-on-surface-variant">maks. {settings?.loyalty_max_redeem_percent}% belanja</span>
+                                        </label>
+                                    )}
+                                    {quoteFieldErrors.redeem_points && <p className="text-xs text-error">{quoteFieldErrors.redeem_points[0]}</p>}
+                                    {quoteError && !quoteFieldErrors.voucher_code && !quoteFieldErrors.redeem_points && <p className="text-xs text-error">{quoteError}</p>}
+                                </div>
+                            )}
+
                             <div className="flex items-end justify-between">
-                                <span className="label-caps">Total</span>
-                                <span className="font-display text-3xl tabular">{formatPrice(totals.total)}</span>
+                                <span className="label-caps">Total{quoting ? ' · menghitung…' : ''}</span>
+                                <span className="font-display text-3xl tabular">{formatPrice(shown.total)}</span>
                             </div>
                             <div className="grid grid-cols-[auto_1fr] gap-2">
                                 <button className="btn-outline" onClick={submitPayLater} disabled={busy || lines.length === 0} title="Simpan sebagai tagihan, bayar nanti">
                                     <Icon name="schedule" className="text-[18px]" /> Nanti
                                 </button>
-                                <button className="btn-primary btn-lg" onClick={startCheckout} disabled={busy || lines.length === 0}>
-                                    <Icon name="payments" /> Bayar {formatPrice(totals.total)}
+                                <button className="btn-primary btn-lg" onClick={startCheckout} disabled={busy || lines.length === 0 || quoting || !!quoteError}>
+                                    <Icon name="payments" /> Bayar {formatPrice(shown.total)}
                                 </button>
                             </div>
                             {lines.length > 0 && (
@@ -383,13 +457,23 @@ const Pos = () => {
                     onApply={(spec) => { setDiscount(spec); setDiscountOpen(false); }} />
             )}
 
+            {memberOpen && (
+                <MemberModal onClose={() => setMemberOpen(false)}
+                    onSelect={(m) => {
+                        setMember(m);
+                        setRedeemPoints(0);
+                        if (!customerName.trim()) setCustomerName(m.name);
+                        setMemberOpen(false);
+                    }} />
+            )}
+
             {sheetProduct && <ModifierSheet product={sheetProduct} onClose={() => setSheetProduct(null)} onAdd={addLine} />}
 
             {checkoutOpen && (
                 <PaymentModal
                     title="Pembayaran"
                     subtitle={`${customerName} · ${lines.reduce((s, l) => s + l.quantity, 0)} item`}
-                    total={totals.total}
+                    total={shown.total}
                     onClose={() => setCheckoutOpen(false)}
                     onSubmit={submitPaid}
                 />
@@ -412,6 +496,9 @@ const Pos = () => {
                         <p className="label-caps mb-2">Nomor antrean</p>
                         <p className="font-display text-7xl text-primary tabular leading-none">{success.order.queue_number}</p>
                         <p className="mt-4 text-on-surface-variant">{success.order.customer_name}</p>
+                        {success.order.points_earned > 0 && (
+                            <p className="mt-2 text-sm text-sage">+{success.order.points_earned} poin untuk member</p>
+                        )}
                         {success.order.payment_status === 'paid' ? (
                             success.change > 0 && (
                                 <div className="mt-6 rounded-xl bg-sage-soft px-5 py-4">

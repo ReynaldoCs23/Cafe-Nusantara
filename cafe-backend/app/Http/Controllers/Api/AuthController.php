@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
@@ -112,12 +113,17 @@ class AuthController extends Controller
     public function updateProfile(Request $request)
     {
         $user = $request->user();
+        if ($request->filled('phone_number')) {
+            $request->merge(['phone_number' => User::normalizePhone($request->phone_number)]);
+        }
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
             'password' => 'nullable|string|min:8|confirmed',
-            'phone_number' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s]{8,20}$/'],
+            'phone_number' => ['nullable', 'string', 'max:20', 'regex:/^\+?\d{8,16}$/', Rule::unique('users', 'phone_number')->ignore($user->id)],
+        ], [
+            'phone_number.unique' => 'No. HP ini sudah dipakai akun lain. Hubungi kasir jika ini nomor Anda.',
         ]);
 
         $user->name = $validated['name'];

@@ -42,6 +42,10 @@ class AdminSettingsController extends Controller
             'ready_overdue_minutes' => 'sometimes|required|integer|min:1|max:120',
             'loyalty_enabled' => 'sometimes|required|boolean',
             'discount_approval_percent' => 'sometimes|required|numeric|min:0|max:100',
+            'loyalty_earn_amount' => 'sometimes|required|integer|min:1000|max:1000000',
+            'loyalty_point_value' => 'sometimes|required|integer|min:1|max:100000',
+            'loyalty_min_redeem' => 'sometimes|required|integer|min:1|max:100000',
+            'loyalty_max_redeem_percent' => 'sometimes|required|integer|min:1|max:100',
         ];
 
         foreach (StoreSettings::DAYS as $day) {

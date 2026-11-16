@@ -1,7 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\AdminCategoryController;
+use App\Http\Controllers\Api\Admin\AdminPromotionController;
 use App\Http\Controllers\Api\Admin\AuditLogController;
+use App\Http\Controllers\Api\Pos\MemberController;
+use App\Http\Controllers\Api\PromotionController;
 use App\Http\Controllers\Api\Admin\AdminContentController;
 use App\Http\Controllers\Api\Admin\AdminDashboardController;
 use App\Http\Controllers\Api\Admin\AdminModifierGroupController;
@@ -54,6 +57,8 @@ Route::prefix('v1')->group(function () {
 
     // Pemesanan mandiri (QR meja & online)
     Route::post('/orders', [OrderController::class, 'store'])->middleware('throttle:public-write');
+    Route::post('/orders/quote', [PromotionController::class, 'quote'])->middleware('throttle:public-lookup');
+    Route::get('/promotions', [PromotionController::class, 'index']);
     Route::post('/checkout', [OrderController::class, 'store'])->middleware('throttle:public-write'); // alias lama
     Route::get('/orders/{order_number}', [OrderController::class, 'show'])->middleware('throttle:public-lookup');
 
@@ -75,6 +80,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/my-orders', [OrderController::class, 'myOrders']);
     Route::put('/profile', [AuthController::class, 'updateProfile']);
+    Route::get('/my-loyalty', [PromotionController::class, 'myLoyalty']);
 });
 
 /*
@@ -93,6 +99,9 @@ Route::prefix('v1/admin')->middleware('auth:sanctum')->group(function () {
         Route::post('/orders/{id}/refunds', [AdminOrderController::class, 'refund']); // butuh manager/PIN manager
 
         Route::get('/pos/menu', [PosController::class, 'menu']);
+        Route::post('/pos/quote', [PosController::class, 'quote']);
+        Route::get('/pos/members', [MemberController::class, 'search']);
+        Route::post('/pos/members', [MemberController::class, 'store']);
         Route::post('/pos/orders', [PosController::class, 'store']);
         Route::post('/pos/order-items/{id}/void', [PosController::class, 'voidItem']);
         Route::get('/pos/orders/{id}/receipt', [PosController::class, 'receipt']);
@@ -135,6 +144,8 @@ Route::prefix('v1/admin')->middleware('auth:sanctum')->group(function () {
         Route::get('/reports/hourly', [ReportController::class, 'hourly']);
         Route::get('/reports/exceptions', [ReportController::class, 'exceptions']);
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
+        Route::apiResource('promotions', AdminPromotionController::class);
+        Route::get('/members/{id}/loyalty', [MemberController::class, 'history']);
 
         Route::apiResource('products', AdminProductController::class);
         Route::apiResource('categories', AdminCategoryController::class);
@@ -166,5 +177,6 @@ Route::prefix('v1/admin')->middleware('auth:sanctum')->group(function () {
         Route::apiResource('users', AdminUserController::class);
         Route::get('/settings', [AdminSettingsController::class, 'show']);
         Route::put('/settings', [AdminSettingsController::class, 'update']);
+        Route::post('/members/{id}/points', [MemberController::class, 'adjust']);
     });
 });

@@ -77,7 +77,10 @@ export const buildReceiptHtml = ({ store, order }, width = getPaperWidth()) => {
         <hr>
         <table>
             ${row('Subtotal', rp(order.subtotal))}
-            ${order.discount_total ? row('Diskon', `-${rp(order.discount_total)}`) : ''}
+            ${order.promo_discount ? row(order.voucher_code ? `Voucher ${order.voucher_code}` : `Promo ${order.promotion_name || ''}`, `-${rp(order.promo_discount)}`) : ''}
+            ${order.manual_discount ? row('Diskon', `-${rp(order.manual_discount)}`) : ''}
+            ${order.points_discount ? row(`Tukar ${order.points_redeemed} poin`, `-${rp(order.points_discount)}`) : ''}
+            ${!order.promo_discount && !order.manual_discount && !order.points_discount && order.discount_total ? row('Diskon', `-${rp(order.discount_total)}`) : ''}
             ${order.service_charge ? row('Service', rp(order.service_charge)) : ''}
             ${row(`Pajak${store.tax_inclusive ? ' (termasuk)' : ''}`, rp(order.tax_amount))}
             ${order.rounding ? row('Pembulatan', rp(order.rounding)) : ''}
@@ -86,6 +89,7 @@ export const buildReceiptHtml = ({ store, order }, width = getPaperWidth()) => {
         <hr>
         <table>${payments || row('Status', 'BELUM DIBAYAR', 'b')}</table>
         ${order.notes ? `<hr><div>Catatan: ${esc(order.notes)}</div>` : ''}
+        ${order.points_earned ? `<hr><div class="c">Poin member +${order.points_earned}</div>` : ''}
         <hr>
         <div class="c">${esc(store.receipt_footer || 'Terima kasih')}</div>
     `, width);

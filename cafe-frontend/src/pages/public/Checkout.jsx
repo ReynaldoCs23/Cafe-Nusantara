@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart, unitPriceOf } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
@@ -10,6 +10,7 @@ import PageIntro from '../../components/public/PageIntro';
 import { Field, Icon, Segmented } from '../../components/ui';
 import { useTableSession } from '../../hooks/useTableSession';
 import { clearTableSession } from '../../utils/table';
+import { useQuote } from '../../hooks/useQuote';
 
 const Step = ({ number, title, children }) => (
     <section className="py-10 border-t border-hairline first:border-t-0 first:pt-0">
@@ -43,6 +44,16 @@ const Checkout = () => {
     const [error, setError] = useState('');
     // Satu kunci per percobaan checkout: klik ganda / retry tidak membuat pesanan ganda
     const idempotencyKey = useRef(newIdempotencyKey());
+    const [voucher, setVoucher] = useState('');
+    const [voucherInput, setVoucherInput] = useState('');
+    const [usePoints, setUsePoints] = useState(false);
+    const [loyalty, setLoyalty] = useState(null);
+
+    // Saldo poin hanya untuk pelanggan yang login & program poin aktif
+    useEffect(() => {
+        if (!user || user.role !== 'customer' || !settings?.loyalty_enabled) return;
+        api.get('/my-loyalty').then((res) => setLoyalty(res.data.data)).catch(() => setLoyalty(null));
+    }, [user, settings?.loyalty_enabled]);
 
     useEffect(() => {
         if (user) {
@@ -50,7 +61,17 @@ const Checkout = () => {
         }
     }, [user]);
 
-    const totals = calculateTotals(subtotal, settings);
+    const localTotals = calculateTotals(subtotal, settings);
+    const quotePayload = useMemo(() => ({
+        items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity, modifier_ids: (item.modifiers || []).map((m) => m.id) })),
+        voucher_code: voucher || undefined,
+        redeem_points: usePoints && loyalty ? loyalty.points : undefined,
+        table_token: table?.token || undefined,
+    }), [cartItems, voucher, usePoints, loyalty, table]);
+    const { quote, error: quoteError, fieldErrors, loading: quoting } = useQuote('/orders/quote', quotePayload, cartItems.length > 0);
+    const totals = quote
+        ? { ...localTotals, subtotal: quote.subtotal, service: quote.service_charge, tax: quote.tax_amount, rounding: quote.rounding, total: quote.grand_total }
+        : localTotals;
     const storeClosed = settings && !settings.is_open;
     const payAtCashier = settings?.pay_at_cashier_enabled ?? true;
 
@@ -82,6 +103,8 @@ const Checkout = () => {
                 notes: form.notes.trim() || null,
                 table_token: table?.token || null,
                 fulfillment: table ? fulfillment : 'pickup',
+                voucher_code: voucher || null,
+                redeem_points: usePoints && quote?.points_redeemed ? quote.points_redeemed : 0,
             }, { headers: { 'Idempotency-Key': idempotencyKey.current } });
 
             const { order_number: orderNumber } = response.data.data;
@@ -192,8 +215,39 @@ const Checkout = () => {
                             </li>
                         ))}
                     </ul>
+                    <div className="border-t border-hairline mt-6 pt-6 space-y-3">
+                        {voucher ? (
+                            <div className={`flex items-center justify-between rounded-xl border px-4 py-2.5 text-sm ${fieldErrors.voucher_code ? 'border-error/40 text-error' : 'border-sage/40 text-sage'}`}>
+                                <span className="flex items-center gap-2"><Icon name="confirmation_number" className="text-[18px]" /> {voucher}</span>
+                                <button type="button" onClick={() => { setVoucher(''); setVoucherInput(''); }} aria-label="Hapus voucher"><Icon name="close" className="text-[18px]" /></button>
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <input className="input text-sm uppercase" value={voucherInput} onChange={(e) => setVoucherInput(e.target.value)} placeholder="Punya kode voucher?" maxLength={40}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (voucherInput.trim()) setVoucher(voucherInput.trim().toUpperCase()); } }} />
+                                <button type="button" className="btn-outline text-sm" disabled={!voucherInput.trim()} onClick={() => setVoucher(voucherInput.trim().toUpperCase())}>Pakai</button>
+                            </div>
+                        )}
+                        {fieldErrors.voucher_code && <p className="text-xs text-error">{fieldErrors.voucher_code[0]}</p>}
+                        {loyalty?.enabled && loyalty.points > 0 && (
+                            <label className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${usePoints ? 'border-sage/50 bg-sage-soft' : 'border-hairline'} ${loyalty.points < loyalty.settings.loyalty_min_redeem ? 'opacity-60' : 'cursor-pointer'}`}>
+                                <span className="flex items-center gap-2.5">
+                                    <input type="checkbox" checked={usePoints} disabled={loyalty.points < loyalty.settings.loyalty_min_redeem} onChange={(e) => setUsePoints(e.target.checked)} />
+                                    <span>Pakai poin saya <span className="block text-xs text-on-surface-variant">Saldo {loyalty.points} poin{loyalty.points < loyalty.settings.loyalty_min_redeem ? ` · minimal ${loyalty.settings.loyalty_min_redeem}` : ''}</span></span>
+                                </span>
+                                {usePoints && quote?.points_discount > 0 && <span className="text-sage tabular">−{formatPrice(quote.points_discount)}</span>}
+                            </label>
+                        )}
+                        {fieldErrors.redeem_points && <p className="text-xs text-error">{fieldErrors.redeem_points[0]}</p>}
+                    </div>
                     <div className="border-t border-hairline mt-6 pt-6 space-y-2.5 text-sm">
                         <Row label="Subtotal" value={totals.subtotal} />
+                        {quote?.promo_discount > 0 && (
+                            <div className="flex justify-between text-sage"><span>{quote.promotion?.is_voucher ? 'Voucher' : 'Promo'} · {quote.promotion?.name}</span><span className="tabular">−{formatPrice(quote.promo_discount)}</span></div>
+                        )}
+                        {quote?.points_discount > 0 && (
+                            <div className="flex justify-between text-sage"><span>Tukar {quote.points_redeemed} poin</span><span className="tabular">−{formatPrice(quote.points_discount)}</span></div>
+                        )}
                         {totals.service > 0 && <Row label="Service charge" value={totals.service} />}
                         <Row label={`Pajak PB1 ${totals.taxRate}%${totals.taxInclusive ? ' (termasuk)' : ''}`} value={totals.tax} />
                         {totals.rounding !== 0 && <Row label="Pembulatan" value={totals.rounding} />}
@@ -205,7 +259,8 @@ const Checkout = () => {
 
                     {error && <p className="mt-6 flex gap-2 rounded-xl bg-[#fff4f2] border border-error/25 px-4 py-3 text-sm text-error" role="alert"><Icon name="error" className="text-[18px]" />{error}</p>}
 
-                    <button type="submit" disabled={isSubmitting || storeClosed || !payAtCashier} className="btn-primary btn-lg rounded-full w-full mt-8">
+                    {quote?.points_to_earn > 0 && <p className="mt-4 text-xs text-sage text-right">Anda akan mendapat +{quote.points_to_earn} poin setelah pesanan dibayar.</p>}
+                    <button type="submit" disabled={isSubmitting || storeClosed || !payAtCashier || quoting || !!quoteError} className="btn-primary btn-lg rounded-full w-full mt-8">
                         {isSubmitting ? 'Memproses...' : 'Kirim pesanan'}
                     </button>
                     <p className="text-xs text-on-surface-variant text-center mt-4">Total final dihitung ulang oleh sistem saat pesanan dikirim.</p>

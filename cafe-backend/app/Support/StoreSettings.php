@@ -55,6 +55,10 @@ class StoreSettings
         'discount_approval_percent' => 10,
 
         'loyalty_enabled' => false, // jawaban PRD Q7: fitur bisa dinonaktifkan
+        'loyalty_earn_amount' => 10000, // dapat 1 poin setiap belanja Rp10.000
+        'loyalty_point_value' => 100, // 1 poin = Rp100 saat ditukar
+        'loyalty_min_redeem' => 50, // minimal tukar 50 poin
+        'loyalty_max_redeem_percent' => 50, // poin maksimal menutup 50% belanja
     ];
 
     /** Kunci yang aman ditampilkan ke publik. */
@@ -64,6 +68,7 @@ class StoreSettings
         'opening_hours', 'temporarily_closed',
         'pay_at_cashier_enabled', 'online_payment_enabled', 'loyalty_enabled',
         'qr_payment_timeout_minutes', 'discount_approval_percent',
+        'loyalty_earn_amount', 'loyalty_point_value', 'loyalty_min_redeem', 'loyalty_max_redeem_percent',
     ];
 
     public static function encode(mixed $value): string

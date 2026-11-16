@@ -33,6 +33,8 @@ class OrderController extends Controller
             'notes' => 'nullable|string|max:500',
             'table_token' => 'nullable|string|max:64',
             'fulfillment' => 'nullable|in:pickup,table',
+            'voucher_code' => 'nullable|string|max:40',
+            'redeem_points' => 'nullable|integer|min:0',
         ]);
 
         if (! StoreSettings::isOpen()) {
@@ -71,6 +73,8 @@ class OrderController extends Controller
             'customer_phone' => $validated['customer_phone'] ?? $user?->phone_number,
             'notes' => $validated['notes'] ?? null,
             'user_id' => $user?->id,
+            'voucher_code' => $validated['voucher_code'] ?? null,
+            'redeem_points' => $user ? ($validated['redeem_points'] ?? 0) : 0,
             'idempotency_key' => $this->idempotencyKey($request),
             'payment_due_at' => now()->addMinutes((int) StoreSettings::get('qr_payment_timeout_minutes')),
         ]);

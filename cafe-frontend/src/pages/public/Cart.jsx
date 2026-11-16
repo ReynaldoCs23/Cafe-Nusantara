@@ -1,4 +1,7 @@
+import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuote } from '../../hooks/useQuote';
+import { useTableSession } from '../../hooks/useTableSession';
 import { useCart, unitPriceOf } from '../../context/CartContext';
 import { getImageUrl } from '../../utils/imageHelper';
 import { calculateTotals, formatPrice, modifierSummary } from '../../utils/pos';
@@ -11,7 +14,17 @@ const Cart = () => {
     const { cartItems, updateQuantity, removeFromCart, subtotal, itemCount } = useCart();
     const navigate = useNavigate();
     const settings = useStoreSettings();
-    const totals = calculateTotals(subtotal, settings);
+    const table = useTableSession();
+    const quotePayload = useMemo(() => ({
+        items: cartItems.map((item) => ({ product_id: item.product.id, quantity: item.quantity, modifier_ids: (item.modifiers || []).map((m) => m.id) })),
+        table_token: table?.token || undefined,
+    }), [cartItems, table]);
+    // Total dari server agar promo otomatis langsung terlihat; perhitungan lokal sebagai cadangan
+    const { quote } = useQuote('/orders/quote', quotePayload, cartItems.length > 0);
+    const local = calculateTotals(subtotal, settings);
+    const totals = quote
+        ? { ...local, subtotal: quote.subtotal, service: quote.service_charge, tax: quote.tax_amount, rounding: quote.rounding, total: quote.grand_total, promo: quote.promo_discount, promoName: quote.promotion?.name }
+        : local;
 
     if (cartItems.length === 0) {
         return (
@@ -65,6 +78,7 @@ const Cart = () => {
                     <h2 className="font-display text-2xl mb-6">Ringkasan</h2>
                     <dl className="space-y-3 text-sm">
                         <div className="flex justify-between text-on-surface-variant"><dt>Subtotal</dt><dd className="tabular">{formatPrice(totals.subtotal)}</dd></div>
+                        {totals.promo > 0 && <div className="flex justify-between text-sage"><dt>Promo · {totals.promoName}</dt><dd className="tabular">−{formatPrice(totals.promo)}</dd></div>}
                         {totals.service > 0 && <div className="flex justify-between text-on-surface-variant"><dt>Service charge</dt><dd className="tabular">{formatPrice(totals.service)}</dd></div>}
                         <div className="flex justify-between text-on-surface-variant"><dt>Pajak PB1 {totals.taxRate}%{totals.taxInclusive ? ' (termasuk)' : ''}</dt><dd className="tabular">{formatPrice(totals.tax)}</dd></div>
                         {totals.rounding !== 0 && <div className="flex justify-between text-on-surface-variant"><dt>Pembulatan</dt><dd className="tabular">{formatPrice(totals.rounding)}</dd></div>}

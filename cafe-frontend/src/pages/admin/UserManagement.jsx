@@ -26,6 +26,7 @@ const UserManagement = () => {
     const [form, setForm] = useState(null);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [pointsUser, setPointsUser] = useState(null);
 
     useEffect(() => {
         api.get('/admin/users')
@@ -135,7 +136,12 @@ const UserManagement = () => {
                                     <td className="px-5 py-3.5">
                                         {tab === 'staff'
                                             ? (u.has_pin ? <span className="text-sage flex items-center gap-1"><Icon name="check" className="text-[16px]" /> Ada</span> : <span className="text-amber-700">Belum</span>)
-                                            : <span className="text-on-surface-variant">{u.phone_number || '—'}</span>}
+                                            : (
+                                                <span className="text-on-surface-variant">
+                                                    {u.phone_number || '—'}
+                                                    <button className="ml-3 chip border-sage/30 text-sage bg-sage-soft tabular" onClick={() => setPointsUser(u)} title="Riwayat & penyesuaian poin">{u.loyalty_points ?? 0} poin</button>
+                                                </span>
+                                            )}
                                     </td>
                                     <td className="px-5 py-3.5">{u.is_active === false ? <span className="text-error">Nonaktif</span> : <span className="text-on-surface-variant">Aktif</span>}</td>
                                     <td className="px-5 py-3.5 text-right whitespace-nowrap">
@@ -149,6 +155,11 @@ const UserManagement = () => {
                 )}
             </div>
 
+            {pointsUser && (
+                <PointsModal user={pointsUser} onClose={() => setPointsUser(null)}
+                    onChanged={(points) => setUsers((prev) => prev.map((u) => (u.id === pointsUser.id ? { ...u, loyalty_points: points } : u)))} />
+            )}
+
             {form && (
                 <Modal title={editing ? 'Ubah pengguna' : 'Tambah pengguna'} onClose={() => setForm(null)} size="lg"
                     footer={<><button className="btn-outline" onClick={() => setForm(null)}>Batal</button><button form="user-form" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan'}</button></>}>
@@ -160,7 +171,7 @@ const UserManagement = () => {
                                 {Object.entries(ROLES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                             </select>
                         </Field>
-                        <Field label="Email"><input className="input" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+                        <Field label="Email" hint="Opsional untuk member yang didaftarkan kasir."><input className="input" type="email" value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
                         <Field label="No. HP"><input className="input" value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} /></Field>
                         <Field label="Password" hint={editing ? 'Kosongkan jika tidak diubah.' : 'Minimal 8 karakter.'} className="col-span-2">
                             <input className="input" type="password" minLength={8} required={!editing} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" />
@@ -186,6 +197,67 @@ const UserManagement = () => {
                 </Modal>
             )}
         </div>
+    );
+};
+
+/** Riwayat poin member & penyesuaian manual (owner). */
+const PointsModal = ({ user, onClose, onChanged }) => {
+    const { notify } = useToast();
+    const [data, setData] = useState(null);
+    const [points, setPoints] = useState('');
+    const [note, setNote] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        api.get(`/admin/members/${user.id}/loyalty`).then((res) => setData(res.data.data)).catch(() => setData({ points: user.loyalty_points, transactions: [] }));
+    }, [user]);
+
+    const submit = async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setError('');
+        try {
+            const res = await api.post(`/admin/members/${user.id}/points`, { points: Number(points), note: note.trim() });
+            notify('Poin disesuaikan');
+            onChanged(res.data.data.points);
+            const fresh = await api.get(`/admin/members/${user.id}/loyalty`);
+            setData(fresh.data.data);
+            setPoints('');
+            setNote('');
+        } catch (err) {
+            setError(apiErrorMessage(err, 'Gagal menyesuaikan poin.'));
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <Modal title={`Poin ${user.name}`} subtitle={user.phone_number || user.email} onClose={onClose} size="md">
+            {!data ? <LoadingBlock /> : (
+                <div className="space-y-6">
+                    <p className="font-display text-5xl tabular">{data.points} <span className="text-lg text-on-surface-variant font-sans">poin</span></p>
+                    <form onSubmit={submit} className="grid grid-cols-[120px_1fr_auto] gap-2 items-start">
+                        <input className="input tabular" type="number" required value={points} onChange={(e) => setPoints(e.target.value)} placeholder="+/- poin" aria-label="Jumlah poin" />
+                        <input className="input" required minLength={3} maxLength={255} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Alasan, mis. kompensasi" aria-label="Alasan" />
+                        <button className="btn-primary" disabled={busy || !points || Number(points) === 0}>Simpan</button>
+                    </form>
+                    {error && <p className="text-sm text-error">{error}</p>}
+                    <ul className="divide-y divide-hairline border-y border-hairline max-h-72 overflow-y-auto scroll-thin">
+                        {data.transactions.length === 0 && <li className="py-6 text-center text-sm text-on-surface-variant">Belum ada riwayat poin.</li>}
+                        {data.transactions.map((t) => (
+                            <li key={t.id} className="flex justify-between gap-4 py-3 text-sm">
+                                <span>
+                                    {t.note || t.type}
+                                    <span className="block text-xs text-on-surface-variant">{new Date(t.created_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}{t.creator ? ` · ${t.creator.name}` : ''}</span>
+                                </span>
+                                <span className={`tabular font-semibold ${t.points >= 0 ? 'text-sage' : 'text-error'}`}>{t.points >= 0 ? '+' : ''}{t.points}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </Modal>
     );
 };
 

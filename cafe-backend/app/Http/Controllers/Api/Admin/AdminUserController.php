@@ -19,14 +19,15 @@ class AdminUserController extends Controller
 
     public function store(Request $request)
     {
+        $this->normalizePhone($request);
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'username' => 'nullable|string|max:50|alpha_dash|unique:users,username',
-            'email' => 'required|email|unique:users,email',
+            'email' => 'nullable|email|unique:users,email',
             'password' => 'required|string|min:8',
             'role' => ['required', Rule::in(Role::values())],
             'pin' => 'nullable|digits_between:4,6',
-            'phone_number' => 'nullable|string|max:20',
+            'phone_number' => ['nullable', 'string', 'max:20', Rule::unique('users', 'phone_number')],
             'is_active' => 'nullable|boolean',
         ]);
 
@@ -54,15 +55,16 @@ class AdminUserController extends Controller
     {
         $user = User::findOrFail($id);
 
+        $this->normalizePhone($request);
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'username' => ['sometimes', 'required', 'string', 'max:50', 'alpha_dash', Rule::unique('users', 'username')->ignore($user->id)],
-            'email' => ['sometimes', 'required', 'email', Rule::unique('users', 'email')->ignore($user->id)],
+            'email' => ['sometimes', 'nullable', 'email', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => 'nullable|string|min:8',
             'role' => ['sometimes', 'required', Rule::in(Role::values())],
             'pin' => 'nullable|digits_between:4,6',
             'remove_pin' => 'nullable|boolean',
-            'phone_number' => 'nullable|string|max:20',
+            'phone_number' => ['nullable', 'string', 'max:20', Rule::unique('users', 'phone_number')->ignore($user->id)],
             'is_active' => 'sometimes|required|boolean',
         ]);
 
@@ -108,6 +110,13 @@ class AdminUserController extends Controller
         $user->delete();
 
         return response()->json(['message' => 'Pengguna berhasil dihapus']);
+    }
+
+    private function normalizePhone(Request $request): void
+    {
+        if ($request->has('phone_number')) {
+            $request->merge(['phone_number' => User::normalizePhone($request->phone_number)]);
+        }
     }
 
     private function activeOwnerCount(): int

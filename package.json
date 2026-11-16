@@ -1,0 +1,18 @@
+{
+  "name": "cafe-nusantara",
+  "private": true,
+  "description": "Menjalankan seluruh webapp Cafe Nusantara (backend, scheduler, realtime, frontend) dengan satu perintah.",
+  "scripts": {
+    "dev": "concurrently --kill-others-on-fail --names \"API,JADWAL,REALTIME,WEB\" --prefix-colors \"blue,magenta,green,yellow\" \"npm:dev:api\" \"npm:dev:scheduler\" \"npm:dev:reverb\" \"npm:dev:web\"",
+    "dev:api": "cd cafe-backend && php artisan serve",
+    "dev:scheduler": "cd cafe-backend && php artisan schedule:work",
+    "dev:reverb": "cd cafe-backend && php artisan reverb:start",
+    "dev:web": "cd cafe-frontend && npm run dev -- --open",
+    "dev:lan": "concurrently --kill-others-on-fail --names \"API,JADWAL,REALTIME,WEB\" --prefix-colors \"blue,magenta,green,yellow\" \"cd cafe-backend && php artisan serve --host=0.0.0.0\" \"npm:dev:scheduler\" \"cd cafe-backend && php artisan reverb:start --host=0.0.0.0\" \"cd cafe-frontend && npm run dev -- --host --open\"",
+    "setup": "cd cafe-backend && composer install && php artisan migrate --force && cd ../cafe-frontend && npm install",
+    "test": "cd cafe-backend && php artisan test"
+  },
+  "devDependencies": {
+    "concurrently": "9.1.2"
+  }
+}

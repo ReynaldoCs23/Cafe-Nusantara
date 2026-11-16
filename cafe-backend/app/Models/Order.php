@@ -20,7 +20,7 @@ class Order extends Model
     protected $fillable = [
         'user_id', 'created_by', 'shift_id', 'order_number', 'channel', 'fulfillment', 'dining_table_id',
         'customer_name', 'customer_phone', 'queue_number',
-        'subtotal', 'discount_total', 'discount_type', 'discount_value', 'discount_reason', 'discount_by', 'service_charge', 'tax_amount', 'rounding', 'grand_total',
+        'subtotal', 'discount_total', 'discount_type', 'discount_value', 'discount_reason', 'discount_by', 'manual_discount', 'promotion_id', 'promotion_name', 'voucher_code', 'promo_discount', 'points_redeemed', 'points_discount', 'points_earned', 'service_charge', 'tax_amount', 'rounding', 'grand_total',
         'status', 'payment_status', 'remarks', 'notes', 'access_token', 'idempotency_key',
         'pickup_at', 'payment_due_at', 'paid_at', 'ready_at', 'completed_at', 'cancelled_at', 'cancel_reason',
     ];
@@ -36,6 +36,11 @@ class Order extends Model
             'payment_status' => PaymentStatus::class,
             'subtotal' => 'integer',
             'discount_total' => 'integer',
+            'manual_discount' => 'integer',
+            'promo_discount' => 'integer',
+            'points_redeemed' => 'integer',
+            'points_discount' => 'integer',
+            'points_earned' => 'integer',
             'service_charge' => 'integer',
             'tax_amount' => 'integer',
             'rounding' => 'integer',

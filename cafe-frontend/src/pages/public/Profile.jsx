@@ -15,10 +15,16 @@ const Profile = () => {
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState(null);
     const [orders, setOrders] = useState(null);
+    const [loyalty, setLoyalty] = useState(null);
 
     useEffect(() => {
         if (!user || !token) navigate('/login');
     }, [user, token, navigate]);
+
+    useEffect(() => {
+        if (!token || user?.role !== 'customer') return;
+        api.get('/my-loyalty').then((res) => setLoyalty(res.data.data)).catch(() => setLoyalty(null));
+    }, [token, user?.role]);
 
     useEffect(() => {
         if (tab !== 'orders' || !token) return;
@@ -52,8 +58,23 @@ const Profile = () => {
             <PageIntro eyebrow="Akun saya" title={`Halo, ${user.name.split(' ')[0]}.`} description="Pantau pesanan dan kelola data akun Anda." />
 
             <div className="max-w-5xl mx-auto px-5 md:px-10">
+                {loyalty?.enabled && (
+                    <section className="mb-10 rounded-3xl bg-espresso text-cream p-8 flex flex-wrap items-end justify-between gap-6">
+                        <div>
+                            <p className="label-caps text-stone-400">Poin member</p>
+                            <p className="font-display text-6xl tabular mt-2">{loyalty.points}</p>
+                            <p className="text-sm text-stone-300 mt-2">
+                                Setara {formatPrice(loyalty.points * loyalty.settings.loyalty_point_value)} · dapat 1 poin setiap belanja {formatPrice(loyalty.settings.loyalty_earn_amount)}
+                            </p>
+                        </div>
+                        <p className="text-sm text-stone-300 max-w-xs">
+                            Tukar minimal {loyalty.settings.loyalty_min_redeem} poin saat checkout atau sebutkan no. HP Anda di kasir. Poin menutup maksimal {loyalty.settings.loyalty_max_redeem_percent}% belanja.
+                        </p>
+                    </section>
+                )}
+
                 <div className="flex gap-1.5 mb-10 border-b border-hairline">
-                    {[['orders', 'Riwayat pesanan'], ['profile', 'Data akun']].map(([key, label]) => (
+                    {[['orders', 'Riwayat pesanan'], ...(loyalty?.enabled ? [['points', 'Riwayat poin']] : []), ['profile', 'Data akun']].map(([key, label]) => (
                         <button key={key} onClick={() => setTab(key)}
                             className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === key ? 'border-primary text-ink' : 'border-transparent text-on-surface-variant hover:text-ink'}`}>
                             {label}
@@ -103,6 +124,25 @@ const Profile = () => {
                                 ))}
                             </ul>
                         )
+                )}
+
+                {tab === 'points' && loyalty && (
+                    loyalty.transactions.length === 0 ? <EmptyState icon="loyalty" title="Belum ada riwayat poin" description="Poin bertambah setiap kali pesanan Anda dibayar." /> : (
+                        <ul className="card divide-y divide-hairline">
+                            {loyalty.transactions.map((t) => (
+                                <li key={t.id} className="flex items-center justify-between gap-4 px-6 py-4">
+                                    <div>
+                                        <p className="font-medium">{t.note || t.type}</p>
+                                        <p className="text-xs text-on-surface-variant">{formatDateTime(t.created_at)}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className={`font-semibold tabular ${t.points >= 0 ? 'text-sage' : 'text-error'}`}>{t.points >= 0 ? '+' : ''}{t.points}</p>
+                                        <p className="text-xs text-on-surface-variant tabular">Saldo {t.balance_after}</p>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    )
                 )}
 
                 {tab === 'profile' && (

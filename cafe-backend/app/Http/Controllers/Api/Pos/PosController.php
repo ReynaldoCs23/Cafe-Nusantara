@@ -68,6 +68,9 @@ class PosController extends Controller
             'discount.reason' => 'required_with:discount|string|min:3|max:255',
             'approver_username' => 'nullable|string',
             'approver_pin' => 'nullable|string',
+            'member_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'customer')],
+            'voucher_code' => 'nullable|string|max:40',
+            'redeem_points' => 'nullable|integer|min:0',
         ]);
 
         $key = $request->header('Idempotency-Key');
@@ -89,6 +92,9 @@ class PosController extends Controller
             'customer_phone' => $validated['customer_phone'] ?? null,
             'notes' => $validated['notes'] ?? null,
             'discount' => $discount,
+            'user_id' => $validated['member_id'] ?? null,
+            'voucher_code' => $validated['voucher_code'] ?? null,
+            'redeem_points' => $validated['redeem_points'] ?? 0,
             'idempotency_key' => is_string($key) && preg_match('/^[A-Za-z0-9\-_]{8,100}$/', $key) ? $key : null,
         ], $validated['payments'] ?? [], $request->user(), (bool) ($validated['pay_later'] ?? false));
 
@@ -96,6 +102,34 @@ class PosController extends Controller
             'message' => $order->payment_status->value === 'paid' ? 'Pesanan dibayar dan masuk antrean' : 'Pesanan disimpan, belum dibayar',
             'data' => $order,
         ], 201);
+    }
+
+    /** Perkiraan total di kasir: promo otomatis, voucher, diskon manual, dan tukar poin member. */
+    public function quote(Request $request)
+    {
+        $validated = $request->validate([
+            'items' => 'required|array|min:1|max:100',
+            'items.*.product_id' => 'required|integer',
+            'items.*.quantity' => 'required|integer|min:1|max:999',
+            'items.*.modifier_ids' => 'nullable|array|max:20',
+            'items.*.modifier_ids.*' => 'integer',
+            'member_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where('role', 'customer')],
+            'voucher_code' => 'nullable|string|max:40',
+            'redeem_points' => 'nullable|integer|min:0',
+            'discount' => 'nullable|array',
+            'discount.type' => 'required_with:discount|in:percent,amount',
+            'discount.value' => 'required_with:discount|integer|min:1',
+        ]);
+
+        return response()->json(['data' => $this->orders->quote([
+            ...$validated,
+            'channel' => 'pos',
+            'user_id' => $validated['member_id'] ?? null,
+            // Pratinjau: persetujuan PIN diperiksa saat pesanan dikirim
+            'discount' => ! empty($validated['discount'])
+                ? [...$validated['discount'], 'reason' => 'pratinjau', 'actor' => $request->user(), 'approver' => $request->user()]
+                : null,
+        ])]);
     }
 
     public function voidItem(Request $request, string $id)

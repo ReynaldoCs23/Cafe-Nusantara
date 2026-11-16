@@ -5,6 +5,7 @@ import { useCart } from '../../context/CartContext';
 import ProductModal from '../../components/ProductModal';
 import ProductCard from '../../components/ProductCard';
 import PageIntro from '../../components/public/PageIntro';
+import PromoStrip from '../../components/public/PromoStrip';
 import { EmptyState, Icon, Spinner } from '../../components/ui';
 import { formatPrice } from '../../utils/pos';
 import { useStoreSettings } from '../../hooks/useStoreSettings';
@@ -62,6 +63,10 @@ const Menu = () => {
                     </p>
                 </div>
             )}
+
+            <div className="max-w-7xl mx-auto px-5 md:px-10 mb-8">
+                <PromoStrip />
+            </div>
 
             {/* Navigasi kategori menempel */}
             <div className={`sticky z-30 bg-cream/95 backdrop-blur border-y border-hairline ${table ? 'top-[124px]' : 'top-20'}`}>

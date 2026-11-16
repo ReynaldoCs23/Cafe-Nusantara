@@ -9,6 +9,7 @@ import api from '../../api/axios';
 import { useCart } from '../../context/CartContext';
 import ProductCard from '../../components/ProductCard';
 import ContentCard from '../../components/ui/ContentCard';
+import PromoStrip from '../../components/public/PromoStrip';
 import { Icon, Spinner } from '../../components/ui';
 import { getImageUrl } from '../../utils/imageHelper';
 import { useStoreSettings } from '../../hooks/useStoreSettings';
@@ -113,6 +114,10 @@ const Home = () => {
                     ))}
                 </div>
             </section>
+
+            <div className="max-w-7xl mx-auto px-5 md:px-10 pt-12">
+                <PromoStrip />
+            </div>
 
             {/* Rekomendasi */}
             {data.products.length > 0 && (

@@ -183,9 +183,24 @@ const StoreSettings = () => {
                 </div>
             </Section>
 
-            <Section title="Fitur opsional">
-                <Toggle label="Program member/loyalty" checked={settings.loyalty_enabled} onChange={(v) => set('loyalty_enabled', v)}
-                    hint="Nonaktif secara default. Fitur poin dibangun pada fase lanjutan." />
+            <Section title="Member & poin" description="Member mengumpulkan poin dari setiap pesanan yang dibayar, lalu menukarnya sebagai potongan. Kasir mencari member lewat no. HP.">
+                <Toggle label="Aktifkan program poin" checked={settings.loyalty_enabled} onChange={(v) => set('loyalty_enabled', v)}
+                    hint="Saat nonaktif, poin tidak bertambah dan tidak bisa ditukar. Saldo poin tetap tersimpan." />
+                {settings.loyalty_enabled && (
+                    <>
+                        <div className="grid md:grid-cols-2 gap-4">
+                            <NumberField label="Belanja per 1 poin (Rp)" value={settings.loyalty_earn_amount} onChange={(v) => set('loyalty_earn_amount', v)} min="1000" step="1000" required />
+                            <NumberField label="Nilai 1 poin saat ditukar (Rp)" value={settings.loyalty_point_value} onChange={(v) => set('loyalty_point_value', v)} min="1" required />
+                            <NumberField label="Minimal tukar (poin)" value={settings.loyalty_min_redeem} onChange={(v) => set('loyalty_min_redeem', v)} min="1" required />
+                            <NumberField label="Poin menutup maks. (% belanja)" value={settings.loyalty_max_redeem_percent} onChange={(v) => set('loyalty_max_redeem_percent', v)} min="1" max="100" required />
+                        </div>
+                        <p className="text-sm text-on-surface-variant bg-surface-container-low rounded-xl px-4 py-3">
+                            Contoh: belanja {formatPrice(100000)} memberi {Math.floor(100000 / (settings.loyalty_earn_amount || 1))} poin,
+                            senilai {formatPrice(Math.floor(100000 / (settings.loyalty_earn_amount || 1)) * (settings.loyalty_point_value || 0))} saat ditukar
+                            ({(((settings.loyalty_point_value || 0) / (settings.loyalty_earn_amount || 1)) * 100).toFixed(1)}% kembali ke pelanggan).
+                        </p>
+                    </>
+                )}
             </Section>
 
             <div className="fixed bottom-0 left-64 right-0 bg-paper/95 backdrop-blur border-t border-hairline px-10 py-4 flex items-center justify-end gap-4 z-30">

@@ -33,6 +33,19 @@ class User extends Authenticatable
         ];
     }
 
+    /** No. HP disimpan seragam (hanya angka dan +) agar pencarian member & cek duplikat akurat. */
+    public static function normalizePhone(?string $phone): ?string
+    {
+        $clean = preg_replace('/[^\d+]/', '', (string) $phone);
+
+        return $clean === '' ? null : $clean;
+    }
+
+    public function setPhoneNumberAttribute(?string $value): void
+    {
+        $this->attributes['phone_number'] = self::normalizePhone($value);
+    }
+
     public function hasRole(string ...$roles): bool
     {
         return in_array($this->role, $roles, true);
