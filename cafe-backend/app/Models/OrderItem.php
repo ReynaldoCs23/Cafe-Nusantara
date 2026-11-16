@@ -10,10 +10,21 @@ class OrderItem extends Model
     /** @use HasFactory<\Database\Factories\OrderItemFactory> */
     use HasFactory;
 
-    protected $fillable = ['order_id', 'product_id', 'product_name', 'quantity', 'price_at_transaction', 'customizations'];
+    protected $fillable = [
+        'order_id', 'product_id', 'product_name', 'quantity', 'unit_price',
+        'modifiers', 'modifiers_total', 'line_total', 'notes', 'station', 'status',
+        'started_at', 'ready_at', 'voided_at', 'voided_by', 'void_reason',
+    ];
 
     protected $casts = [
-        'customizations' => 'array',
+        'modifiers' => 'array',
+        'quantity' => 'integer',
+        'unit_price' => 'integer',
+        'modifiers_total' => 'integer',
+        'line_total' => 'integer',
+        'started_at' => 'datetime',
+        'ready_at' => 'datetime',
+        'voided_at' => 'datetime',
     ];
 
     public function order()

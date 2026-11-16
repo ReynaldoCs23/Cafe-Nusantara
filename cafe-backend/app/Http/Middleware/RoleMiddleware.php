@@ -6,14 +6,18 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * Pemakaian: ->middleware('role:owner,manager')
+ */
 class RoleMiddleware
 {
-    public function handle(Request $request, Closure $next, $role): Response
+    public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        // Cek apakah user sudah login dan role-nya sesuai (misal: admin)
-        if (! $request->user() || $request->user()->role !== $role) {
+        $user = $request->user();
+
+        if (! $user || ! $user->is_active || ! in_array($user->role, $roles, true)) {
             return response()->json([
-                'message' => 'Akses ditolak. Anda bukan ' . $role
+                'message' => 'Akses ditolak. Peran Anda tidak memiliki izin untuk aksi ini.',
             ], 403);
         }
 

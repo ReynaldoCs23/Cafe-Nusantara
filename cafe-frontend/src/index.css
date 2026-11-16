@@ -71,7 +71,12 @@
         vertical-align: middle;
     }
     body {
-        background-color: var(--color-background);
+        background-color: #fdfbf7;
+        background-image: 
+            url('/bg-noise.svg');
+        background-size: 150px 150px;
+        background-repeat: repeat, repeat;
+        background-attachment: fixed, fixed;
     }
     input:focus {
         outline: none;
@@ -103,3 +108,78 @@
         scrollbar-width: none;  /* Firefox */
     }
 }
+/* ------------------------------------------------------------------
+   Design system komponen (DESIGN.md: Organic Heritage Minimalist)
+   Hairline 1px, tanpa bayangan berat, Playfair untuk judul, Inter untuk UI.
+   ------------------------------------------------------------------ */
+@theme {
+  --color-ink: #2c2a27;
+  --color-hairline: #e6e0d6;
+  --color-cream: #fdfbf7;
+  --color-paper: #ffffff;
+  --color-sage: #6f7d45;
+  --color-sage-soft: #eef1e4;
+  --color-terracotta: #b45e45;
+  --color-amber-soft: #fbf1df;
+  --color-espresso: #1f1c19;
+  --color-espresso-2: #2a2622;
+  --color-espresso-3: #37312b;
+  --font-display: 'Playfair Display', serif;
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+@utility font-display { font-family: var(--font-display); }
+@utility label-caps {
+  @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-on-surface-variant;
+}
+@utility page-title {
+  @apply text-3xl md:text-[34px] leading-tight text-ink;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@utility card {
+  @apply bg-paper border border-hairline rounded-xl;
+}
+@utility hairline { @apply border-hairline; }
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold
+    transition-colors duration-200 select-none disabled:opacity-45 disabled:cursor-not-allowed
+    focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary;
+}
+@utility btn-primary { @apply btn bg-primary text-white hover:bg-primary-container; }
+@utility btn-secondary { @apply btn border border-ink/80 text-ink bg-transparent hover:bg-ink hover:text-cream; }
+@utility btn-outline { @apply btn border border-hairline bg-paper text-ink hover:border-ink/40; }
+@utility btn-ghost { @apply btn text-on-surface-variant hover:bg-surface-container hover:text-ink; }
+@utility btn-danger { @apply btn border border-error/40 text-error bg-paper hover:bg-error hover:text-white; }
+@utility btn-sage { @apply btn bg-sage text-white hover:bg-[#5d6a38]; }
+@utility btn-lg { @apply px-6 py-4 text-base rounded-xl; }
+@utility btn-icon { @apply btn p-2.5; }
+@utility input {
+  @apply w-full rounded-lg border border-hairline bg-paper px-3.5 py-2.5 text-sm text-ink
+    placeholder:text-on-surface-variant/50 transition-colors focus:border-ink;
+}
+@utility input-lg { @apply input text-lg py-3.5; }
+@utility chip {
+  @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold;
+}
+@utility tab {
+  @apply px-4 py-2 rounded-full text-sm font-medium text-on-surface-variant border border-transparent
+    hover:text-ink transition-colors whitespace-nowrap;
+}
+@utility tab-active { @apply tab bg-ink text-cream hover:text-cream; }
+@utility scroll-thin { scrollbar-width: thin; scrollbar-color: #d9d2c7 transparent; }
+@utility tabular { font-variant-numeric: tabular-nums; }
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(180, 94, 69, 0.45); }
+  100% { box-shadow: 0 0 0 14px rgba(180, 94, 69, 0); }
+}
+.animate-pulse-ring { animation: pulse-ring 1.6s ease-out 3; }
+
+@keyframes slide-up {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up { animation: slide-up 0.28s ease-out; }
+.animate-fade-in { animation: slide-up 0.35s ease-out; }

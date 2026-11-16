@@ -1,149 +1,136 @@
-import React, { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Icon } from './ui';
+import { formatPrice } from '../utils/pos';
 
+const defaultSelection = (product) => {
+    const selection = {};
+    (product?.modifier_groups || []).forEach((group) => {
+        const available = (group.modifiers || []).filter((m) => m.is_available);
+        selection[group.id] = group.min_select > 0 && group.max_select === 1 && available[0] ? [available[0].id] : [];
+    });
+    return selection;
+};
+
+/**
+ * Detail produk untuk pelanggan: pilihan varian dari backend, jumlah, dan catatan.
+ * Grup wajib harus dipilih sebelum bisa ditambahkan ke keranjang.
+ */
 const ProductModal = ({ product, isOpen, onClose, onAddToCart }) => {
     const [quantity, setQuantity] = useState(1);
-    const [iceLevel, setIceLevel] = useState('Normal');
-    const [sugarLevel, setSugarLevel] = useState('Normal');
-    const [spicyLevel, setSpicyLevel] = useState('Sedang');
-    const [size, setSize] = useState('Regular');
+    const [selection, setSelection] = useState({});
+    const [notes, setNotes] = useState('');
+
+    useEffect(() => {
+        if (isOpen && product) {
+            setQuantity(1);
+            setSelection(defaultSelection(product));
+            setNotes('');
+        }
+    }, [isOpen, product]);
+
+    useEffect(() => {
+        if (!isOpen) return undefined;
+        const onKey = (e) => e.key === 'Escape' && onClose();
+        document.body.style.overflow = 'hidden';
+        window.addEventListener('keydown', onKey);
+        return () => {
+            document.body.style.overflow = '';
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [isOpen, onClose]);
+
+    const groups = useMemo(() => product?.modifier_groups || [], [product]);
+    const chosen = useMemo(() => {
+        const out = [];
+        groups.forEach((g) => (selection[g.id] || []).forEach((id) => {
+            const m = g.modifiers.find((x) => x.id === id);
+            if (m) out.push({ id: m.id, group: g.name, name: m.name, price_delta: m.price_delta });
+        }));
+        return out;
+    }, [groups, selection]);
 
     if (!isOpen || !product) return null;
 
-    const categoryName = product?.category?.name || '';
-    const isFood = categoryName.toLowerCase() === 'makanan';
-    const isDrink = categoryName.toLowerCase() === 'kopi' || categoryName.toLowerCase() === 'non-kopi';
+    const missing = groups.filter((g) => (selection[g.id] || []).length < g.min_select);
+    const unitPrice = product.price + chosen.reduce((s, m) => s + m.price_delta, 0);
+    const soldOut = product.is_sold_out;
 
-    const formatPrice = (price) => {
-        return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
-    };
-
-    const handleAddToCart = () => {
-        let customizations = null;
-        if (isDrink) {
-            customizations = {
-                size: size,
-                ice: iceLevel,
-                sugar: sugarLevel
-            };
-        }
-        if (isDrink) {
-            customizations.ice = iceLevel;
-            customizations.sugar = sugarLevel;
-        }
-        onAddToCart(product, quantity, customizations);
-    };
-
-    const currentPrice = product.price + (isDrink && size === 'Large' ? 5000 : 0);
+    const toggle = (group, id) => setSelection((prev) => {
+        const current = prev[group.id] || [];
+        if (group.max_select === 1) return { ...prev, [group.id]: current.includes(id) && group.min_select === 0 ? [] : [id] };
+        if (current.includes(id)) return { ...prev, [group.id]: current.filter((x) => x !== id) };
+        if (group.max_select > 0 && current.length >= group.max_select) return prev;
+        return { ...prev, [group.id]: [...current, id] };
+    });
 
     return (
-        <div className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 transition-opacity duration-300">
-            <div className="absolute inset-0 cursor-pointer" onClick={onClose}></div>
-            
-            <div className="relative bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col md:flex-row shadow-2xl animate-fade-in rounded-2xl">
-                <button 
-                    className="absolute top-4 right-4 z-10 text-gray-500 hover:text-gray-900 transition-colors bg-white/50 backdrop-blur-sm rounded-full p-2" 
-                    onClick={onClose}
-                >
-                    <span className="material-symbols-outlined">close</span>
+        <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-espresso/50 backdrop-blur-[2px] md:p-6" role="dialog" aria-modal="true" aria-label={product.name}>
+            <div className="absolute inset-0" onClick={onClose} />
+            <div className="relative w-full max-w-5xl max-h-[94vh] overflow-hidden bg-cream rounded-t-3xl md:rounded-3xl grid md:grid-cols-2 animate-slide-up">
+                <button onClick={onClose} className="absolute right-4 top-4 z-10 h-10 w-10 rounded-full bg-cream/90 flex items-center justify-center hover:bg-paper" aria-label="Tutup">
+                    <Icon name="close" />
                 </button>
 
-                {/* Image Section */}
-                <div className="w-full md:w-1/2 p-4 md:p-8 flex flex-col gap-4 border-b md:border-b-0 md:border-r border-gray-100 bg-gray-50">
-                    <div className="aspect-square w-full overflow-hidden rounded-xl shadow-sm">
-                        <img 
-                            className="w-full h-full object-cover" 
-                            src={product.image_url || "https://via.placeholder.com/600x600?text=No+Image"} 
-                            alt={product.name} 
-                        />
-                    </div>
+                <div className="relative h-64 md:h-auto bg-surface-container">
+                    {product.image_url
+                        ? <img src={product.image_url} alt={product.name} className={`absolute inset-0 h-full w-full object-cover ${soldOut ? 'grayscale opacity-60' : ''}`} />
+                        : <div className="absolute inset-0 flex items-center justify-center text-on-surface-variant/30"><Icon name="local_cafe" className="text-7xl" /></div>}
                 </div>
 
-                {/* Content Section */}
-                <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col">
-                    {product.category && (
-                        <span className="text-gray-500 font-semibold text-xs tracking-widest uppercase mb-2">{product.category.name}</span>
-                    )}
-                    <h2 className="font-display-lg text-3xl text-gray-900 font-bold mb-2 leading-tight">{product.name}</h2>
-                    <p className="text-primary text-2xl font-bold mb-6">{formatPrice(currentPrice)}</p>
-                    
-                    <div className="prose text-gray-600 mb-8 leading-relaxed text-sm">
-                        <p>{product.description}</p>
+                <div className="flex flex-col max-h-[calc(94vh-16rem)] md:max-h-[90vh]">
+                    <div className="flex-1 overflow-y-auto scroll-thin px-6 md:px-10 pt-8 pb-6">
+                        {product.category && <p className="label-caps text-primary mb-3">{product.category.name}</p>}
+                        <h2 className="font-display text-4xl leading-tight text-ink">{product.name}</h2>
+                        <p className="mt-3 text-xl text-primary tabular">{formatPrice(unitPrice)}</p>
+                        {product.description && <p className="mt-5 text-on-surface-variant leading-relaxed">{product.description}</p>}
+
+                        <div className="mt-8 space-y-7">
+                            {groups.map((group) => (
+                                <fieldset key={group.id}>
+                                    <legend className="flex items-baseline justify-between w-full mb-3">
+                                        <span className="label-caps text-ink">{group.name}</span>
+                                        <span className={`text-xs ${missing.includes(group) ? 'text-primary font-semibold' : 'text-on-surface-variant'}`}>
+                                            {group.min_select > 0 ? 'Wajib' : 'Opsional'}{group.max_select > 1 ? ` · maks ${group.max_select}` : ''}
+                                        </span>
+                                    </legend>
+                                    <div className="flex flex-wrap gap-2">
+                                        {group.modifiers.map((m) => {
+                                            const active = (selection[group.id] || []).includes(m.id);
+                                            return (
+                                                <button type="button" key={m.id} disabled={!m.is_available} onClick={() => toggle(group, m.id)} aria-pressed={active}
+                                                    className={`rounded-full border px-4 py-2 text-sm transition-colors disabled:opacity-35 disabled:cursor-not-allowed ${
+                                                        active ? 'border-ink bg-ink text-cream' : 'border-hairline bg-paper hover:border-ink/40'
+                                                    }`}>
+                                                    {m.name}
+                                                    {m.price_delta !== 0 && <span className={`ml-1.5 text-xs ${active ? 'text-stone-300' : 'text-on-surface-variant'}`}>+{formatPrice(m.price_delta)}</span>}
+                                                    {!m.is_available && <span className="ml-1.5 text-xs">· habis</span>}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </fieldset>
+                            ))}
+
+                            <label className="block">
+                                <span className="label-caps text-ink block mb-3">Catatan <span className="normal-case tracking-normal font-normal text-on-surface-variant">(opsional)</span></span>
+                                <input className="input" maxLength={200} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Contoh: tanpa sedotan" />
+                            </label>
+                        </div>
                     </div>
 
-                    {/* Customizations */}
-                    {isDrink && (
-                        <div className="flex flex-col gap-6 mb-8 flex-grow">
-                            {/* Size */}
-                            <div>
-                                <h4 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">Ukuran</h4>
-                                <div className="flex gap-4">
-                                    {['Regular', 'Large'].map((opt) => (
-                                        <label key={opt} className={`cursor-pointer flex-1 py-3 px-4 text-center rounded-xl border ${size === opt ? 'border-primary bg-primary/5 text-primary font-semibold' : 'border-gray-200 text-gray-600 hover:bg-gray-50'} transition-all`}>
-                                            <input type="radio" className="hidden" name="size" value={opt} checked={size === opt} onChange={() => setSize(opt)} />
-                                            {opt} {opt === 'Large' && <span className="block text-xs font-normal opacity-70">(+ Rp 5.000)</span>}
-                                        </label>
-                                    ))}
-                                </div>
+                    <div className="border-t border-hairline px-6 md:px-10 py-5 bg-cream">
+                        {missing.length > 0 && !soldOut && <p className="text-sm text-primary mb-3">Pilih {missing.map((g) => g.name).join(', ')} terlebih dahulu.</p>}
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center rounded-full border border-hairline bg-paper">
+                                <button className="h-12 w-12 flex items-center justify-center text-on-surface-variant hover:text-ink" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Kurangi"><Icon name="remove" /></button>
+                                <span className="w-8 text-center font-semibold tabular">{quantity}</span>
+                                <button className="h-12 w-12 flex items-center justify-center text-on-surface-variant hover:text-ink" onClick={() => setQuantity((q) => Math.min(99, q + 1))} aria-label="Tambah"><Icon name="add" /></button>
                             </div>
-
-                            {/* Ice Level */}
-                            <div>
-                                <h4 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">Es</h4>
-                                <div className="flex gap-3">
-                                    {['Normal', 'Less Ice', 'No Ice'].map((opt) => (
-                                        <label key={opt} className={`cursor-pointer py-2 px-4 rounded-full border text-sm ${iceLevel === opt ? 'border-primary bg-primary/5 text-primary font-semibold' : 'border-gray-200 text-gray-600 hover:bg-gray-50'} transition-all`}>
-                                            <input type="radio" className="hidden" name="ice" value={opt} checked={iceLevel === opt} onChange={() => setIceLevel(opt)} />
-                                            {opt}
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Sugar Level */}
-                            <div>
-                                <h4 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">Gula</h4>
-                                <div className="flex gap-3">
-                                    {['Normal', 'Less Sugar', 'No Sugar'].map((opt) => (
-                                        <label key={opt} className={`cursor-pointer py-2 px-4 rounded-full border text-sm ${sugarLevel === opt ? 'border-primary bg-primary/5 text-primary font-semibold' : 'border-gray-200 text-gray-600 hover:bg-gray-50'} transition-all`}>
-                                            <input type="radio" className="hidden" name="sugar" value={opt} checked={sugarLevel === opt} onChange={() => setSugarLevel(opt)} />
-                                            {opt}
-                                        </label>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {!isDrink && (
-                        <div className="flex-grow"></div>
-                    )}
-                    
-                    <div className="border-t border-gray-100 pt-6 flex items-center gap-4">
-                        {/* Quantity Selector */}
-                        <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden h-14 bg-gray-50">
-                            <button 
-                                className="px-4 h-full flex items-center justify-center hover:bg-gray-200 text-gray-600 transition-colors"
-                                onClick={() => setQuantity(q => Math.max(1, q - 1))}
-                            >
-                                <span className="material-symbols-outlined text-[20px]">remove</span>
-                            </button>
-                            <div className="w-12 text-center font-semibold text-gray-900">{quantity}</div>
-                            <button 
-                                className="px-4 h-full flex items-center justify-center hover:bg-gray-200 text-gray-600 transition-colors"
-                                onClick={() => setQuantity(q => q + 1)}
-                            >
-                                <span className="material-symbols-outlined text-[20px]">add</span>
+                            <button className="btn-primary btn-lg flex-1 rounded-full" disabled={soldOut || missing.length > 0}
+                                onClick={() => onAddToCart(product, quantity, chosen, notes)}>
+                                {soldOut ? 'Sedang habis' : <>Tambah ke keranjang · <span className="tabular">{formatPrice(unitPrice * quantity)}</span></>}
                             </button>
                         </div>
-                        
-                        {/* Add to Cart Button */}
-                        <button 
-                            onClick={handleAddToCart}
-                            className="flex-grow bg-primary text-white font-bold tracking-widest uppercase py-0 h-14 rounded-xl hover:bg-[#7a3c28] transition-colors shadow-md flex items-center justify-center gap-2"
-                        >
-                            <span className="material-symbols-outlined">shopping_bag</span>
-                            Tambah - {formatPrice(currentPrice * quantity)}
-                        </button>
                     </div>
                 </div>
             </div>

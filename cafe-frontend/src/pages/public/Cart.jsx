@@ -1,126 +1,83 @@
-import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useCart } from '../../context/CartContext';
+import { useCart, unitPriceOf } from '../../context/CartContext';
 import { getImageUrl } from '../../utils/imageHelper';
+import { calculateTotals, formatPrice, modifierSummary } from '../../utils/pos';
+import { useStoreSettings } from '../../hooks/useStoreSettings';
+import PageIntro from '../../components/public/PageIntro';
+import { Icon } from '../../components/ui';
 
+/** Keranjang belanja dengan perkiraan total (total final dihitung server saat checkout). */
 const Cart = () => {
-    const { cartItems, updateQuantity, removeFromCart } = useCart();
+    const { cartItems, updateQuantity, removeFromCart, subtotal, itemCount } = useCart();
     const navigate = useNavigate();
-
-    const formatPrice = (price) => {
-        return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
-    };
-
-    const subtotal = cartItems.reduce((acc, item) => {
-        const itemPrice = item.product.price + (item.customizations?.size === 'Large' ? 5000 : 0);
-        return acc + (itemPrice * item.quantity);
-    }, 0);
-    const tax = Math.floor(subtotal * 0.11);
-    const total = subtotal + tax;
+    const settings = useStoreSettings();
+    const totals = calculateTotals(subtotal, settings);
 
     if (cartItems.length === 0) {
         return (
-            <main className="flex-grow w-full max-w-[1440px] mx-auto px-5 md:px-grid-margin py-section-gap-mobile md:py-section-gap-desktop text-center animate-fade-in">
-                <h1 className="text-3xl md:text-4xl font-serif text-gray-900 mb-8 pb-4 border-b border-gray-200 text-center md:text-left">Keranjang Belanja</h1>
-                <p className="font-body-lg text-on-surface-variant mb-8">Keranjang Anda masih kosong.</p>
-                <Link to="/menu" className="inline-block bg-primary text-on-primary font-label-caps px-8 py-4 rounded hover:bg-primary-container transition-colors">
-                    Lihat Menu
-                </Link>
-            </main>
+            <div className="animate-fade-in pb-32">
+                <PageIntro eyebrow="Keranjang" title="Keranjang Anda masih kosong." description="Temukan kopi dan hidangan favorit Anda di menu kami.">
+                    <Link to="/menu" className="btn-primary btn-lg rounded-full px-8 mt-10 inline-flex">Lihat menu <Icon name="arrow_forward" /></Link>
+                </PageIntro>
+            </div>
         );
     }
 
     return (
-        <main className="flex-grow w-full max-w-[1440px] mx-auto px-5 md:px-grid-margin py-section-gap-mobile md:py-section-gap-desktop animate-fade-in">
-            <h1 className="text-3xl md:text-4xl font-serif text-gray-900 mb-8 pb-4 border-b border-gray-200 text-center md:text-left">Keranjang Belanja</h1>
-            
-            <div className="flex flex-col lg:flex-row gap-gutter lg:gap-[80px]">
-                {/* Cart Items List */}
-                <div className="flex-grow">
-                    <div className="flex flex-col gap-8">
-                        {cartItems.map((item) => (
-                            <div key={item.cartItemId} className="flex items-center gap-6 py-8 border-b border-outline-variant/30 relative group">
-                                <div className="w-24 h-24 md:w-32 md:h-32 shrink-0 bg-surface-container-high rounded overflow-hidden">
-                                    <img 
-                                        className="w-full h-full object-cover" 
-                                        src={getImageUrl(item.product.image_url)} 
-                                        alt={item.product.name} 
-                                    />
-                                </div>
-                                <div className="flex-grow flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div>
-                                        <h3 className="font-headline-md text-on-background mb-2">{item.product.name}</h3>
-                                        {item.customizations && (
-                                            <div className="text-xs text-gray-500 mb-2">
-                                                {item.customizations.size && <span>Ukuran: {item.customizations.size} </span>}
-                                                {item.customizations.ice && <span>| Es: {item.customizations.ice} </span>}
-                                                {item.customizations.sugar && <span>| Gula: {item.customizations.sugar}</span>}
-                                            </div>
-                                        )}
-                                        <p className="font-body-md text-on-surface-variant mb-4 md:mb-0 line-clamp-2">{item.product.description}</p>
-                                    </div>
-                                    <div className="flex items-center gap-6 md:gap-12">
-                                        <div className="flex items-center border border-surface-variant rounded bg-surface/50">
-                                            <button 
-                                                onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
-                                                className="px-3 py-1 text-tertiary hover:text-on-surface transition-colors focus:outline-none"
-                                            >
-                                                <span className="material-symbols-outlined text-[16px]">remove</span>
-                                            </button>
-                                            <span className="font-label-sm px-3 min-w-[32px] text-center">{item.quantity}</span>
-                                            <button 
-                                                onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
-                                                className="px-3 py-1 text-tertiary hover:text-on-surface transition-colors focus:outline-none"
-                                            >
-                                                <span className="material-symbols-outlined text-[16px]">add</span>
-                                            </button>
-                                        </div>
-                                        <span className="font-body-md text-primary font-medium w-24 text-right">
-                                            {formatPrice((item.product.price + (item.customizations?.size === 'Large' ? 5000 : 0)) * item.quantity)}
-                                        </span>
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={() => removeFromCart(item.cartItemId)}
-                                    className="absolute top-6 right-0 md:static text-tertiary hover:text-error transition-colors focus:outline-none"
-                                >
-                                    <span className="material-symbols-outlined">close</span>
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+        <div className="animate-fade-in pb-32">
+            <PageIntro eyebrow="Keranjang" title="Pesanan Anda" description={`${itemCount} item siap dipesan.`} />
 
-                {/* Order Summary Sidebar */}
-                <aside className="w-full lg:w-[380px] shrink-0">
-                    <div className="bg-surface-container-low/80 backdrop-blur-sm p-10 border border-outline-variant/30 rounded shadow-sm">
-                        <h2 className="font-headline-md text-on-surface mb-6">Ringkasan Pesanan</h2>
-                        <div className="flex flex-col gap-4 mb-8">
-                            <div className="flex justify-between font-body-md text-on-surface-variant">
-                                <span>Subtotal</span>
-                                <span>{formatPrice(subtotal)}</span>
+            <div className="max-w-7xl mx-auto px-5 md:px-10 grid lg:grid-cols-[1fr_400px] gap-12 lg:gap-20 items-start">
+                <ul className="border-t border-hairline">
+                    {cartItems.map((item) => (
+                        <li key={item.cartItemId} className="flex gap-5 md:gap-8 py-8 border-b border-hairline">
+                            <div className="h-28 w-24 md:h-36 md:w-32 shrink-0 overflow-hidden rounded-xl bg-surface-container">
+                                {item.product.image_url && <img src={getImageUrl(item.product.image_url)} alt="" className="h-full w-full object-cover" />}
                             </div>
-                            <div className="flex justify-between font-body-md text-on-surface-variant">
-                                <span>Pajak (11%)</span>
-                                <span>{formatPrice(tax)}</span>
+                            <div className="flex-1 min-w-0 flex flex-col">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <h3 className="font-display text-2xl leading-snug">{item.product.name}</h3>
+                                        {item.modifiers?.length > 0 && <p className="text-sm text-on-surface-variant mt-1">{modifierSummary(item.modifiers)}</p>}
+                                        {item.notes && <p className="text-sm italic text-on-surface-variant">“{item.notes}”</p>}
+                                    </div>
+                                    <button onClick={() => removeFromCart(item.cartItemId)} className="h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-error" aria-label={`Hapus ${item.product.name}`}>
+                                        <Icon name="close" className="text-[20px]" />
+                                    </button>
+                                </div>
+                                <div className="mt-auto pt-4 flex items-center justify-between">
+                                    <div className="flex items-center rounded-full border border-hairline bg-paper">
+                                        <button className="h-10 w-10 flex items-center justify-center text-on-surface-variant hover:text-ink" onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)} aria-label="Kurangi"><Icon name="remove" className="text-[18px]" /></button>
+                                        <span className="w-8 text-center text-sm font-semibold tabular">{item.quantity}</span>
+                                        <button className="h-10 w-10 flex items-center justify-center text-on-surface-variant hover:text-ink" onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)} aria-label="Tambah"><Icon name="add" className="text-[18px]" /></button>
+                                    </div>
+                                    <span className="text-lg text-primary tabular">{formatPrice(unitPriceOf(item) * item.quantity)}</span>
+                                </div>
                             </div>
-                            <div className="w-full h-px bg-surface-variant my-2"></div>
-                            <div className="flex justify-between font-headline-md text-primary">
-                                <span>Total</span>
-                                <span>{formatPrice(total)}</span>
-                            </div>
-                        </div>
-                        
-                        <button 
-                            onClick={() => navigate('/checkout')}
-                            className="w-full bg-primary text-on-primary font-label-caps uppercase tracking-widest py-5 rounded hover:bg-primary-container transition-all duration-300 shadow-sm"
-                        >
-                            Lanjut ke Pembayaran
-                        </button>
+                        </li>
+                    ))}
+                    <li className="pt-6">
+                        <Link to="/menu" className="inline-flex items-center gap-2 text-sm text-on-surface-variant hover:text-ink"><Icon name="arrow_back" className="text-[18px]" /> Tambah menu lain</Link>
+                    </li>
+                </ul>
+
+                <aside className="card p-8 lg:sticky lg:top-28">
+                    <h2 className="font-display text-2xl mb-6">Ringkasan</h2>
+                    <dl className="space-y-3 text-sm">
+                        <div className="flex justify-between text-on-surface-variant"><dt>Subtotal</dt><dd className="tabular">{formatPrice(totals.subtotal)}</dd></div>
+                        {totals.service > 0 && <div className="flex justify-between text-on-surface-variant"><dt>Service charge</dt><dd className="tabular">{formatPrice(totals.service)}</dd></div>}
+                        <div className="flex justify-between text-on-surface-variant"><dt>Pajak PB1 {totals.taxRate}%{totals.taxInclusive ? ' (termasuk)' : ''}</dt><dd className="tabular">{formatPrice(totals.tax)}</dd></div>
+                        {totals.rounding !== 0 && <div className="flex justify-between text-on-surface-variant"><dt>Pembulatan</dt><dd className="tabular">{formatPrice(totals.rounding)}</dd></div>}
+                    </dl>
+                    <div className="flex items-end justify-between border-t border-hairline mt-6 pt-6">
+                        <span className="label-caps">Total</span>
+                        <span className="font-display text-3xl tabular">{formatPrice(totals.total)}</span>
                     </div>
+                    <button onClick={() => navigate('/checkout')} className="btn-primary btn-lg rounded-full w-full mt-8">Lanjut ke pembayaran <Icon name="arrow_forward" /></button>
+                    <p className="text-xs text-on-surface-variant text-center mt-4">Total final dihitung ulang saat pesanan dikirim.</p>
                 </aside>
             </div>
-        </main>
+        </div>
     );
 };
 

@@ -1,180 +1,84 @@
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api/axios';
+import { Field, Icon } from '../../components/ui';
+import { apiErrorMessage, deviceName } from '../../utils/pos';
 
+/** Pendaftaran akun pelanggan, tampilan selaras dengan halaman masuk. */
 const CustomerRegister = () => {
-    const [formData, setFormData] = useState({
-        name: '',
-        username: '',
-        email: '',
-        password: '',
-        password_confirmation: ''
-    });
+    const [form, setForm] = useState({ name: '', username: '', email: '', password: '', password_confirmation: '' });
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState('');
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
+    const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
 
-    const handleSubmit = async (e) => {
+    const submit = async (e) => {
         e.preventDefault();
+        if (form.password !== form.password_confirmation) return setError('Konfirmasi kata sandi tidak cocok.');
         setLoading(true);
-        setError(null);
-        
-        if (formData.password !== formData.password_confirmation) {
-            setError('Konfirmasi kata sandi tidak cocok.');
-            setLoading(false);
-            return;
-        }
-
+        setError('');
         try {
-            const response = await api.post('/register', formData);
-            if (response.data.access_token) {
-                login(response.data.access_token, response.data.user);
-                if (response.data.user?.role === 'admin') {
-                    navigate('/admin/dashboard');
-                } else {
-                    navigate('/');
-                }
-            }
+            const res = await api.post('/register', { ...form, device_name: deviceName() });
+            login(res.data.access_token, res.data.user);
+            navigate('/');
         } catch (err) {
-            setError(err.response?.data?.message || 'Gagal mendaftar. Silakan coba lagi.');
+            setError(apiErrorMessage(err, 'Gagal mendaftar. Silakan coba lagi.'));
         } finally {
             setLoading(false);
         }
+        return null;
     };
 
     return (
-        <div className="min-h-screen flex flex-col font-body-md text-on-surface bg-[#F9F8F6]">
-            {/* Top Navigation */}
-            <header className="w-full top-0 flex justify-center py-12 px-grid-margin">
-                <div className="text-center">
-                    <h1 className="font-headline-md text-headline-md text-primary tracking-tight mb-2">CafeNusantara</h1>
-                    <p className="font-label-caps text-label-caps text-on-surface-variant tracking-widest">PORTAL PELANGGAN</p>
+        <div className="min-h-screen grid lg:grid-cols-2 bg-cream text-ink">
+            <aside className="hidden lg:flex relative overflow-hidden bg-espresso text-cream p-14 flex-col justify-between">
+                <div className="absolute inset-0 opacity-[0.07] bg-[url('/bg-pattern.svg')] bg-repeat" aria-hidden="true" />
+                <Link to="/" className="relative font-display text-3xl">Cafe Nusantara</Link>
+                <div className="relative max-w-md space-y-6">
+                    <p className="font-display text-5xl leading-[1.15]">Satu akun untuk setiap cangkir.</p>
+                    <ul className="space-y-3 text-stone-300">
+                        {['Lihat riwayat pesanan kapan saja', 'Data terisi otomatis saat memesan', 'Pantau status pesanan secara langsung'].map((t) => (
+                            <li key={t} className="flex items-center gap-3"><Icon name="check" className="text-[18px] text-primary-fixed-dim" /> {t}</li>
+                        ))}
+                    </ul>
                 </div>
-            </header>
+                <p className="relative text-sm text-stone-400">Tanpa akun pun Anda tetap bisa memesan sebagai tamu.</p>
+            </aside>
 
-            {/* Main Content */}
-            <main className="flex-grow flex items-center justify-center px-4 pb-24">
-                <div className="w-full max-w-[480px] bg-surface p-8 md:p-12 border border-[#E5E5E5] rounded-sm shadow-sm">
-                    <div className="mb-10 text-center">
-                        <h2 className="font-headline-md text-headline-md text-on-surface mb-2">Buat Akun Baru</h2>
-                        <p className="font-body-md text-body-md text-on-surface-variant">Bergabung dengan kami untuk mendapatkan penawaran eksklusif.</p>
-                    </div>
+            <main className="flex items-center justify-center px-6 py-16">
+                <div className="w-full max-w-[440px] animate-slide-up">
+                    <Link to="/" className="lg:hidden font-display text-2xl text-primary block mb-10">Cafe Nusantara</Link>
+                    <p className="label-caps mb-3">Akun baru</p>
+                    <h1 className="page-title mb-8">Buat akun pelanggan</h1>
 
-                    {error && (
-                        <div className="mb-6 p-4 bg-red-50 text-red-700 text-sm rounded border border-red-200">
-                            {error}
+                    <form onSubmit={submit} className="space-y-5">
+                        <Field label="Nama lengkap"><input className="input-lg" required value={form.name} onChange={set('name')} autoComplete="name" autoFocus /></Field>
+                        <div className="grid sm:grid-cols-2 gap-5">
+                            <Field label="Username"><input className="input-lg" required value={form.username} onChange={set('username')} autoComplete="username" /></Field>
+                            <Field label="Email"><input className="input-lg" type="email" required value={form.email} onChange={set('email')} autoComplete="email" /></Field>
                         </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* Name */}
-                        <div className="space-y-2">
-                            <label className="font-label-caps text-label-caps text-on-surface-variant" htmlFor="name">Nama Lengkap</label>
-                            <input 
-                                className="w-full bg-transparent border-b border-outline-variant py-3 font-body-md text-body-md transition-all duration-300 focus:border-primary focus:outline-none" 
-                                id="name" 
-                                name="name" 
-                                type="text" 
-                                required 
-                                placeholder="Masukkan nama lengkap Anda"
-                                value={formData.name}
-                                onChange={handleChange}
-                            />
-                        </div>
-
-                        {/* Username */}
-                        <div className="space-y-2">
-                            <label className="font-label-caps text-label-caps text-on-surface-variant" htmlFor="username">Username</label>
-                            <input 
-                                className="w-full bg-transparent border-b border-outline-variant py-3 font-body-md text-body-md transition-all duration-300 focus:border-primary focus:outline-none" 
-                                id="username" 
-                                name="username" 
-                                type="text" 
-                                required 
-                                placeholder="Pilih username unik"
-                                value={formData.username}
-                                onChange={handleChange}
-                            />
-                        </div>
-
-                        {/* Email */}
-                        <div className="space-y-2">
-                            <label className="font-label-caps text-label-caps text-on-surface-variant" htmlFor="email">Email</label>
-                            <input 
-                                className="w-full bg-transparent border-b border-outline-variant py-3 font-body-md text-body-md transition-all duration-300 focus:border-primary focus:outline-none" 
-                                id="email" 
-                                name="email" 
-                                type="email" 
-                                required 
-                                placeholder="nama@email.com"
-                                value={formData.email}
-                                onChange={handleChange}
-                            />
-                        </div>
-
-                        {/* Password */}
-                        <div className="space-y-2">
-                            <label className="font-label-caps text-label-caps text-on-surface-variant" htmlFor="password">Kata Sandi</label>
-                            <div className="relative group">
-                                <input 
-                                    className="w-full bg-transparent border-b border-outline-variant py-3 pr-10 font-body-md text-body-md transition-all duration-300 focus:border-primary focus:outline-none" 
-                                    id="password" 
-                                    name="password" 
-                                    type={showPassword ? "text" : "password"}
-                                    required 
-                                    placeholder="Minimal 8 karakter"
-                                    value={formData.password}
-                                    onChange={handleChange}
-                                />
-                                <button 
-                                    type="button" 
-                                    className="absolute right-0 top-3 text-on-surface-variant hover:text-primary transition-colors focus:outline-none"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                >
-                                    <span className="material-symbols-outlined">{showPassword ? "visibility_off" : "visibility"}</span>
+                        <Field label="Password" hint="Minimal 8 karakter.">
+                            <div className="relative">
+                                <input className="input-lg pr-12" type={showPassword ? 'text' : 'password'} minLength={8} required value={form.password} onChange={set('password')} autoComplete="new-password" />
+                                <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-ink" aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}>
+                                    <Icon name={showPassword ? 'visibility_off' : 'visibility'} className="text-[20px]" />
                                 </button>
                             </div>
-                        </div>
+                        </Field>
+                        <Field label="Ulangi password"><input className="input-lg" type={showPassword ? 'text' : 'password'} minLength={8} required value={form.password_confirmation} onChange={set('password_confirmation')} autoComplete="new-password" /></Field>
 
-                        {/* Password Confirmation */}
-                        <div className="space-y-2">
-                            <label className="font-label-caps text-label-caps text-on-surface-variant" htmlFor="password_confirmation">Konfirmasi Kata Sandi</label>
-                            <input 
-                                className="w-full bg-transparent border-b border-outline-variant py-3 font-body-md text-body-md transition-all duration-300 focus:border-primary focus:outline-none" 
-                                id="password_confirmation" 
-                                name="password_confirmation" 
-                                type={showPassword ? "text" : "password"}
-                                required 
-                                placeholder="Ulangi kata sandi"
-                                value={formData.password_confirmation}
-                                onChange={handleChange}
-                            />
-                        </div>
+                        {error && <p className="flex items-start gap-2 rounded-lg bg-[#fff4f2] border border-error/25 px-4 py-3 text-sm text-error" role="alert"><Icon name="error" className="text-[18px]" /> {error}</p>}
 
-                        {/* Submit Button */}
-                        <div className="pt-6">
-                            <button 
-                                type="submit" 
-                                disabled={loading}
-                                className="w-full bg-primary text-on-primary py-4 px-6 font-label-caps text-label-caps tracking-widest hover:bg-[#7a3c28] transition-all duration-500 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-                            >
-                                {loading ? 'MENDAFTAR...' : 'DAFTAR SEKARANG'}
-                            </button>
-                        </div>
+                        <button type="submit" className="btn-primary btn-lg w-full" disabled={loading}>{loading ? 'Mendaftarkan...' : 'Daftar'}</button>
                     </form>
 
-                    <div className="mt-8 text-center">
-                        <p className="font-body-md text-on-surface-variant">
-                            Sudah punya akun? <Link to="/login" className="text-primary font-bold hover:underline">Masuk di sini</Link>
-                        </p>
-                    </div>
+                    <p className="mt-8 text-sm text-on-surface-variant text-center">
+                        Sudah punya akun? <Link to="/login" className="text-primary font-semibold hover:underline underline-offset-4">Masuk</Link>
+                    </p>
                 </div>
             </main>
         </div>

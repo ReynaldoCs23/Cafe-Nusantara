@@ -2,32 +2,66 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\Role;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens; // 1. TAMBAHKAN BARIS INI DI SINI
+use Illuminate\Support\Facades\Hash;
+use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'username', 'password', 'role'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable(['name', 'email', 'username', 'password', 'role', 'phone_number', 'is_active'])]
+#[Hidden(['password', 'remember_token', 'pin_hash'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable; // 2. TAMBAHKAN HasApiTokens DI SINI
+    use HasApiTokens, HasFactory, Notifiable;
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
+    protected $appends = ['is_staff', 'has_pin'];
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
+    }
+
+    public function hasRole(string ...$roles): bool
+    {
+        return in_array($this->role, $roles, true);
+    }
+
+    public function isStaff(): bool
+    {
+        return in_array($this->role, Role::staffValues(), true);
+    }
+
+    public function isManagerOrOwner(): bool
+    {
+        return $this->hasRole(Role::Owner->value, Role::Manager->value);
+    }
+
+    public function setPin(?string $pin): void
+    {
+        $this->pin_hash = $pin ? Hash::make($pin) : null;
+    }
+
+    public function checkPin(string $pin): bool
+    {
+        return $this->pin_hash !== null && Hash::check($pin, $this->pin_hash);
+    }
+
+    public function getIsStaffAttribute(): bool
+    {
+        return $this->isStaff();
+    }
+
+    public function getHasPinAttribute(): bool
+    {
+        return $this->pin_hash !== null;
     }
 }

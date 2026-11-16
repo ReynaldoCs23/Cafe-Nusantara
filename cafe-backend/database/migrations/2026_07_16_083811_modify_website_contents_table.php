@@ -12,6 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('website_contents', function (Blueprint $table) {
+            $table->dropUnique(['key']); // wajib sebelum drop kolom di SQLite
+        });
+
+        Schema::table('website_contents', function (Blueprint $table) {
             $table->dropColumn('key');
             $table->dropColumn('value');
             

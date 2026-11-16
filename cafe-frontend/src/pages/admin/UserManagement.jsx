@@ -1,197 +1,189 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
+import { EmptyState, Field, Icon, LoadingBlock, Modal, PageHeader, useToast } from '../../components/ui';
+import { ROLES, STAFF_ROLES, apiErrorMessage } from '../../utils/pos';
 
+const emptyForm = { name: '', username: '', email: '', phone_number: '', password: '', role: 'cashier', pin: '', remove_pin: false, is_active: true };
+
+const ROLE_TONE = {
+    owner: 'bg-primary/10 text-primary border-primary/25',
+    manager: 'bg-amber-soft text-amber-800 border-amber-200',
+    cashier: 'bg-sage-soft text-sage border-sage/25',
+    barista: 'bg-surface-container text-ink border-hairline',
+    waiter: 'bg-surface-container text-ink border-hairline',
+    customer: 'bg-paper text-on-surface-variant border-hairline',
+};
+
+/** Staf (peran, PIN, status aktif) dan akun pelanggan. Khusus owner. */
 const UserManagement = () => {
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [toast, setToast] = useState('');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingUser, setEditingUser] = useState(null);
-    const [formData, setFormData] = useState({
-        name: '',
-        username: '',
-        email: '',
-        password: '',
-        role: 'admin'
-    });
+    const { user: me } = useAuth();
+    const { notify } = useToast();
+    const [users, setUsers] = useState(null);
+    const [tab, setTab] = useState('staff');
+    const [query, setQuery] = useState('');
+    const [editing, setEditing] = useState(null);
+    const [form, setForm] = useState(null);
+    const [error, setError] = useState('');
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        fetchUsers();
-    }, []);
+        api.get('/admin/users')
+            .then((res) => setUsers(res.data.data))
+            .catch((err) => notify(apiErrorMessage(err, 'Gagal memuat pengguna.'), 'error'));
+    }, [notify]);
 
-    const fetchUsers = async () => {
+    const openForm = (user = null) => {
+        setEditing(user);
+        setError('');
+        setForm(user
+            ? { ...emptyForm, name: user.name, username: user.username || '', email: user.email, phone_number: user.phone_number || '', role: user.role, is_active: user.is_active !== false }
+            : { ...emptyForm, role: tab === 'customer' ? 'customer' : 'cashier' });
+    };
+
+    const remove = async (user) => {
+        if (!window.confirm(`Hapus ${user.name}? Akun ini akan keluar dari semua perangkat.`)) return;
         try {
-            const res = await api.get('/admin/users');
-            setUsers(res.data.data);
+            await api.delete(`/admin/users/${user.id}`);
+            setUsers((prev) => prev.filter((u) => u.id !== user.id));
+            notify('Pengguna dihapus');
         } catch (err) {
-            console.error('Failed to fetch users', err);
-        } finally {
-            setLoading(false);
+            notify(apiErrorMessage(err, 'Gagal menghapus pengguna.'), 'error');
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!confirm('Are you sure you want to delete this user?')) return;
-        try {
-            await api.delete(`/admin/users/${id}`);
-            setUsers(users.filter(u => u.id !== id));
-            showToast('User deleted successfully');
-        } catch (err) {
-            alert('Failed to delete user');
-        }
-    };
-
-    const openModal = (user = null) => {
-        if (user) {
-            setEditingUser(user);
-            setFormData({
-                name: user.name,
-                username: user.username || '',
-                email: user.email,
-                password: '',
-                role: user.role
-            });
-        } else {
-            setEditingUser(null);
-            setFormData({
-                name: '',
-                username: '',
-                email: '',
-                password: '',
-                role: 'admin'
-            });
-        }
-        setIsModalOpen(true);
-    };
-
-    const handleSubmit = async (e) => {
+    const submit = async (e) => {
         e.preventDefault();
+        setSaving(true);
+        setError('');
+        const payload = { ...form };
+        if (!payload.password) delete payload.password;
+        if (!payload.pin) delete payload.pin;
+        if (!payload.username) delete payload.username;
+        if (!payload.phone_number) payload.phone_number = null;
         try {
-            if (editingUser) {
-                const payload = { ...formData };
-                if (!payload.password) delete payload.password; // Don't send empty password
-                const res = await api.put(`/admin/users/${editingUser.id}`, payload);
-                setUsers(users.map(u => u.id === editingUser.id ? res.data.data : u));
-                showToast('User updated');
+            if (editing) {
+                const res = await api.put(`/admin/users/${editing.id}`, payload);
+                setUsers((prev) => prev.map((u) => (u.id === editing.id ? res.data.data : u)));
+                notify('Pengguna diperbarui');
             } else {
-                const res = await api.post('/admin/users', formData);
-                setUsers([...users, res.data.data]);
-                showToast(`User created with username: ${res.data.data.username}`);
+                const res = await api.post('/admin/users', payload);
+                setUsers((prev) => [...prev, res.data.data]);
+                notify(`Pengguna dibuat · username ${res.data.data.username}`);
             }
-            setIsModalOpen(false);
+            setForm(null);
         } catch (err) {
-            console.error(err);
-            alert('Failed to save user. Check inputs.');
+            setError(apiErrorMessage(err, 'Gagal menyimpan pengguna.'));
+        } finally {
+            setSaving(false);
         }
     };
 
-    const showToast = (msg) => {
-        setToast(msg);
-        setTimeout(() => setToast(''), 3000);
-    };
+    if (!users) return <LoadingBlock />;
 
-    if (loading) return <div className="p-12 text-center text-on-surface-variant font-label-caps">Loading users...</div>;
+    const q = query.trim().toLowerCase();
+    const staff = users.filter((u) => STAFF_ROLES.includes(u.role));
+    const visible = (tab === 'staff' ? staff : users.filter((u) => u.role === 'customer'))
+        .filter((u) => !q || [u.name, u.username, u.email].some((v) => (v || '').toLowerCase().includes(q)));
+    const isStaffForm = form && STAFF_ROLES.includes(form.role);
+    const withoutPin = staff.filter((u) => !u.has_pin && u.is_active !== false).length;
 
     return (
-        <div className="animate-fade-in font-body-md text-on-surface">
-            {toast && (
-                <div className="fixed top-20 right-8 bg-secondary text-on-secondary px-6 py-3 rounded shadow-md z-50 animate-fade-in font-label-caps flex items-center gap-2">
-                    <span className="material-symbols-outlined">check_circle</span>
-                    {toast}
-                </div>
+        <div className="animate-fade-in">
+            <PageHeader eyebrow="Toko" title="Pengguna" description="Atur siapa boleh mengakses apa. PIN dipakai untuk ganti pengguna cepat dan persetujuan manager."
+                actions={<button className="btn-primary" onClick={() => openForm()}><Icon name="person_add" className="text-[18px]" /> Tambah pengguna</button>} />
+
+            {withoutPin > 0 && tab === 'staff' && (
+                <p className="mb-6 flex items-center gap-3 rounded-xl bg-amber-soft border border-amber-200 px-5 py-3 text-sm text-amber-900">
+                    <Icon name="key" className="text-[20px]" /> {withoutPin} staf aktif belum punya PIN.
+                </p>
             )}
 
-            <div className="flex justify-between items-end mb-12">
-                <div>
-                    <h2 className="font-headline-lg text-[32px] text-on-surface mb-2">User Management</h2>
-                    <p className="font-body-md text-on-surface-variant">Manage administrator and staff accounts.</p>
+            <div className="flex flex-wrap items-center gap-3 mb-5">
+                <div className="flex gap-1.5">
+                    <button className={tab === 'staff' ? 'tab-active' : 'tab'} onClick={() => setTab('staff')}>Staf <span className="opacity-60 tabular">{staff.length}</span></button>
+                    <button className={tab === 'customer' ? 'tab-active' : 'tab'} onClick={() => setTab('customer')}>Pelanggan <span className="opacity-60 tabular">{users.length - staff.length}</span></button>
                 </div>
-                <button onClick={() => openModal()} className="bg-primary text-on-primary px-6 py-3 font-label-caps rounded flex items-center gap-2 hover:bg-primary-container transition-colors shadow-sm">
-                    <span className="material-symbols-outlined text-sm">person_add</span>
-                    Tambah User
-                </button>
+                <div className="relative ml-auto w-full sm:w-64">
+                    <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]" />
+                    <input type="search" className="input pl-10" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari nama, username, email" />
+                </div>
             </div>
 
-            <div className="w-full bg-surface rounded border border-outline-variant overflow-hidden shadow-sm">
-                <table className="w-full text-left border-collapse min-w-[800px]">
-                    <thead>
-                        <tr className="bg-surface-container-low border-b border-outline-variant">
-                            <th className="font-label-caps text-on-surface-variant py-4 px-6">Name</th>
-                            <th className="font-label-caps text-on-surface-variant py-4 px-6">Username</th>
-                            <th className="font-label-caps text-on-surface-variant py-4 px-6">Email</th>
-                            <th className="font-label-caps text-on-surface-variant py-4 px-6">Role</th>
-                            <th className="font-label-caps text-on-surface-variant py-4 px-6 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-outline-variant">
-                        {users.map(user => (
-                            <tr key={user.id} className="hover:bg-surface-container-lowest transition-colors group">
-                                <td className="py-4 px-6 font-medium">{user.name}</td>
-                                <td className="py-4 px-6 text-primary">{user.username}</td>
-                                <td className="py-4 px-6">{user.email}</td>
-                                <td className="py-4 px-6">
-                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-semibold uppercase ${user.role === 'admin' ? 'bg-primary-container text-on-primary-container' : 'bg-surface-container-high text-on-surface'}`}>
-                                        {user.role}
-                                    </span>
-                                </td>
-                                <td className="py-4 px-6 text-right">
-                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => openModal(user)} className="p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded">
-                                            <span className="material-symbols-outlined text-[20px]">edit</span>
-                                        </button>
-                                        <button onClick={() => handleDelete(user.id)} className="p-1.5 text-on-surface-variant hover:text-error transition-colors rounded">
-                                            <span className="material-symbols-outlined text-[20px]">delete</span>
-                                        </button>
-                                    </div>
-                                </td>
+            <div className="card overflow-hidden">
+                {visible.length === 0 ? <EmptyState icon="group" title="Belum ada pengguna" /> : (
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b border-hairline text-left">
+                                {['Nama', 'Username', 'Peran', tab === 'staff' ? 'PIN' : 'No. HP', 'Status', ''].map((h) => <th key={h} className="label-caps font-semibold px-5 py-4">{h}</th>)}
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody className="divide-y divide-hairline">
+                            {visible.map((u) => (
+                                <tr key={u.id} className={`hover:bg-surface-container-low/50 ${u.is_active === false ? 'opacity-55' : ''}`}>
+                                    <td className="px-5 py-3.5">
+                                        <div className="flex items-center gap-3">
+                                            <span className="h-9 w-9 shrink-0 rounded-full bg-surface-container text-ink font-semibold flex items-center justify-center">{u.name.slice(0, 1).toUpperCase()}</span>
+                                            <div className="min-w-0">
+                                                <p className="font-medium truncate">{u.name}{u.id === me?.id && <span className="ml-2 text-xs text-on-surface-variant">(Anda)</span>}</p>
+                                                <p className="text-xs text-on-surface-variant truncate">{u.email}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-5 py-3.5 text-on-surface-variant">{u.username}</td>
+                                    <td className="px-5 py-3.5"><span className={`chip ${ROLE_TONE[u.role] || ''}`}>{ROLES[u.role] || u.role}</span></td>
+                                    <td className="px-5 py-3.5">
+                                        {tab === 'staff'
+                                            ? (u.has_pin ? <span className="text-sage flex items-center gap-1"><Icon name="check" className="text-[16px]" /> Ada</span> : <span className="text-amber-700">Belum</span>)
+                                            : <span className="text-on-surface-variant">{u.phone_number || '—'}</span>}
+                                    </td>
+                                    <td className="px-5 py-3.5">{u.is_active === false ? <span className="text-error">Nonaktif</span> : <span className="text-on-surface-variant">Aktif</span>}</td>
+                                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                                        <button className="btn-icon btn-ghost" onClick={() => openForm(u)} aria-label="Ubah"><Icon name="edit" className="text-[18px]" /></button>
+                                        {u.id !== me?.id && <button className="btn-icon btn-ghost hover:text-error" onClick={() => remove(u)} aria-label="Hapus"><Icon name="delete" className="text-[18px]" /></button>}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
             </div>
 
-            {isModalOpen && (
-                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-surface rounded max-w-md w-full p-6 animate-fade-in shadow-lg">
-                        <div className="flex justify-between items-center mb-6 border-b border-outline-variant pb-4">
-                            <h3 className="font-headline-md text-on-surface">{editingUser ? 'Edit User' : 'Tambah User Baru'}</h3>
-                            <button onClick={() => setIsModalOpen(false)} className="text-on-surface-variant hover:text-error">
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block font-label-sm text-on-surface-variant mb-1">Nama Lengkap</label>
-                                <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border border-outline-variant rounded p-2 focus:border-primary focus:outline-none" />
-                            </div>
-                            <div>
-                                <label className="block font-label-sm text-on-surface-variant mb-1">Username</label>
-                                <input type="text" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full border border-outline-variant rounded p-2 focus:border-primary focus:outline-none" placeholder={editingUser ? '' : 'Auto-generated if empty'} />
-                            </div>
-                            <div>
-                                <label className="block font-label-sm text-on-surface-variant mb-1">Email</label>
-                                <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full border border-outline-variant rounded p-2 focus:border-primary focus:outline-none" />
-                            </div>
-                            <div>
-                                <label className="block font-label-sm text-on-surface-variant mb-1">
-                                    Password {editingUser && <span className="text-[10px] text-primary">(Kosongkan jika tidak ingin mengubah)</span>}
-                                </label>
-                                <input type={editingUser ? "password" : "text"} required={!editingUser} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full border border-outline-variant rounded p-2 focus:border-primary focus:outline-none" />
-                            </div>
-                            <div>
-                                <label className="block font-label-sm text-on-surface-variant mb-1">Role</label>
-                                <select required value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full border border-outline-variant rounded p-2 focus:border-primary focus:outline-none bg-surface">
-                                    <option value="admin">Admin</option>
-                                    <option value="customer">Customer</option>
-                                </select>
-                            </div>
-                            <div className="flex justify-end gap-4 pt-4 border-t border-outline-variant">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 font-label-caps text-on-surface-variant hover:text-on-surface">Batal</button>
-                                <button type="submit" className="px-6 py-2 bg-primary text-on-primary rounded font-label-caps hover:bg-primary-container">Simpan</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+            {form && (
+                <Modal title={editing ? 'Ubah pengguna' : 'Tambah pengguna'} onClose={() => setForm(null)} size="lg"
+                    footer={<><button className="btn-outline" onClick={() => setForm(null)}>Batal</button><button form="user-form" className="btn-primary" disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan'}</button></>}>
+                    <form id="user-form" onSubmit={submit} className="grid grid-cols-2 gap-5">
+                        <Field label="Nama lengkap" className="col-span-2"><input className="input" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus /></Field>
+                        <Field label="Username" hint={editing ? '' : 'Dibuat otomatis jika kosong.'}><input className="input" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></Field>
+                        <Field label="Peran">
+                            <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+                                {Object.entries(ROLES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Email"><input className="input" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+                        <Field label="No. HP"><input className="input" value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} /></Field>
+                        <Field label="Password" hint={editing ? 'Kosongkan jika tidak diubah.' : 'Minimal 8 karakter.'} className="col-span-2">
+                            <input className="input" type="password" minLength={8} required={!editing} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" />
+                        </Field>
+                        {isStaffForm && (
+                            <Field label="PIN 4–6 digit" className="col-span-2"
+                                hint={`${editing?.has_pin ? 'Kosongkan jika tidak diubah. ' : ''}Untuk ganti pengguna cepat${['owner', 'manager'].includes(form.role) ? ' dan menyetujui pembatalan/refund' : ''}.`}>
+                                <input className="input tracking-[0.4em] tabular" type="password" inputMode="numeric" pattern="\d{4,6}" maxLength={6}
+                                    value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} autoComplete="off" />
+                            </Field>
+                        )}
+                        {editing?.has_pin && isStaffForm && (
+                            <label className="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={form.remove_pin} onChange={(e) => setForm({ ...form, remove_pin: e.target.checked })} /> Hapus PIN</label>
+                        )}
+                        {editing && editing.id !== me?.id && (
+                            <label className="col-span-2 flex items-start gap-2 text-sm">
+                                <input type="checkbox" className="mt-0.5" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
+                                <span>Akun aktif <span className="block text-xs text-on-surface-variant">Nonaktifkan untuk staf yang sudah tidak bekerja; akun langsung keluar dari semua perangkat.</span></span>
+                            </label>
+                        )}
+                        {error && <p className="col-span-2 text-sm text-error" role="alert">{error}</p>}
+                    </form>
+                </Modal>
             )}
         </div>
     );

@@ -1,92 +1,87 @@
 <?php
+
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class AdminProductController extends Controller
 {
     public function index()
     {
-        $products = Product::with('category')->get();
-        return response()->json(['data' => $products], 200);
+        $products = Product::with(['category', 'modifierGroups:id,name'])
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json(['data' => $products]);
     }
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'category_id' => 'required|exists:categories,id',
-            'name' => 'required|string|max:255',
-            'price' => 'required|numeric',
-            'stock_quantity' => 'required|integer',
-            'description' => 'nullable|string',
-            'is_active' => 'required|boolean',
-            'is_recommended' => 'nullable|boolean',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
-        ]);
+        $validated = $request->validate($this->rules());
 
         if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('products', 'public');
-            $validated['image_path'] = $path;
+            $validated['image_path'] = $request->file('image')->store('products', 'public');
         }
 
-        $validated['is_recommended'] = $request->input('is_recommended', false);
-
-        $product = Product::create($validated);
-        
-        // Reload with category
-        $product->load('category');
+        $product = Product::create($this->defaults($validated));
+        $this->syncModifierGroups($request, $product);
 
         return response()->json([
             'message' => 'Produk berhasil ditambahkan',
-            'data' => $product
+            'data' => $product->load('category', 'modifierGroups:id,name'),
         ], 201);
     }
 
     public function show(string $id)
     {
-        $product = Product::with('category')->findOrFail($id);
-        return response()->json(['data' => $product], 200);
+        return response()->json([
+            'data' => Product::with(['category', 'modifierGroups.modifiers'])->findOrFail($id),
+        ]);
     }
 
     public function update(Request $request, string $id)
     {
         $product = Product::findOrFail($id);
-
-        $validated = $request->validate([
-            'category_id' => 'sometimes|required|exists:categories,id',
-            'name' => 'sometimes|required|string|max:255',
-            'price' => 'sometimes|required|numeric',
-            'stock_quantity' => 'sometimes|required|integer',
-            'description' => 'nullable|string',
-            'is_active' => 'sometimes|required|boolean',
-            'is_recommended' => 'nullable|boolean',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
-        ]);
+        $validated = $request->validate($this->rules($product));
 
         if ($request->hasFile('image')) {
-            // Delete old image if exists
             if ($product->image_path) {
                 Storage::disk('public')->delete($product->image_path);
             }
-            $path = $request->file('image')->store('products', 'public');
-            $validated['image_path'] = $path;
+            $validated['image_path'] = $request->file('image')->store('products', 'public');
         }
 
-        if ($request->has('is_recommended')) {
-            $validated['is_recommended'] = $request->input('is_recommended');
-        }
-
+        unset($validated['image'], $validated['modifier_group_ids']);
         $product->update($validated);
-        
-        $product->load('category');
+        $this->syncModifierGroups($request, $product);
 
         return response()->json([
             'message' => 'Produk berhasil diperbarui',
-            'data' => $product
-        ], 200);
+            'data' => $product->load('category', 'modifierGroups:id,name'),
+        ]);
+    }
+
+    /** Tombol cepat tersedia/habis dan koreksi stok dari POS/KDS. */
+    public function availability(Request $request, string $id)
+    {
+        $product = Product::findOrFail($id);
+
+        $validated = $request->validate([
+            'is_available' => 'sometimes|required|boolean',
+            'stock_quantity' => 'sometimes|required|integer|min:0|max:100000',
+        ]);
+
+        $product->update($validated);
+
+        return response()->json([
+            'message' => $product->is_sold_out ? "{$product->name} ditandai habis" : "{$product->name} tersedia",
+            'data' => $product,
+        ]);
     }
 
     public function destroy(string $id)
@@ -97,6 +92,63 @@ class AdminProductController extends Controller
         }
         $product->delete();
 
-        return response()->json(['message' => 'Produk berhasil dihapus'], 200);
+        return response()->json(['message' => 'Produk berhasil dihapus']);
+    }
+
+    private function rules(?Product $product = null): array
+    {
+        $required = $product ? 'sometimes|required' : 'required';
+
+        return [
+            'category_id' => "{$required}|exists:categories,id",
+            'name' => "{$required}|string|max:255",
+            'sku' => ['nullable', 'string', 'max:50', Rule::unique('products', 'sku')->ignore($product?->id)],
+            'price' => "{$required}|integer|min:0",
+            'station' => ['sometimes', 'required', Rule::in(Product::STATIONS)],
+            'stock_quantity' => 'sometimes|required|integer|min:0|max:100000',
+            'track_stock' => 'sometimes|required|boolean',
+            'description' => 'nullable|string',
+            'is_active' => 'sometimes|required|boolean',
+            'is_available' => 'sometimes|required|boolean',
+            'is_recommended' => 'nullable|boolean',
+            'sort_order' => 'nullable|integer|min:0',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
+            'modifier_group_ids' => 'nullable|array',
+            'modifier_group_ids.*' => 'integer|exists:modifier_groups,id',
+        ];
+    }
+
+    private function defaults(array $validated): array
+    {
+        unset($validated['image'], $validated['modifier_group_ids']);
+
+        return array_merge([
+            'station' => 'bar',
+            'stock_quantity' => 0,
+            'track_stock' => true,
+            'is_active' => true,
+            'is_available' => true,
+            'is_recommended' => false,
+            'sort_order' => 0,
+        ], array_filter($validated, fn ($value) => $value !== null));
+    }
+
+    /**
+     * Sinkron grup modifier jika field dikirim. Kirim modifier_group_ids kosong ("")
+     * untuk melepas semua grup.
+     */
+    private function syncModifierGroups(Request $request, Product $product): void
+    {
+        if (! $request->exists('modifier_group_ids')) {
+            return;
+        }
+
+        $ids = array_values(array_filter((array) $request->input('modifier_group_ids'), fn ($id) => filled($id)));
+        $sync = [];
+        foreach ($ids as $index => $id) {
+            $sync[(int) $id] = ['sort_order' => $index];
+        }
+
+        $product->modifierGroups()->sync($sync);
     }
 }

@@ -1,94 +1,65 @@
-import React from 'react';
+import { Link } from 'react-router-dom';
+import { useStoreSettings } from '../hooks/useStoreSettings';
+import { formatOpeningHours } from '../utils/store';
 
+const SOCIALS = [
+    ['Instagram', 'https://instagram.com', <path key="ig" d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm5 5.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm5.25-1.25a1 1 0 1 0 0 2 1 1 0 0 0 0-2z" />],
+    ['YouTube', 'https://youtube.com', <path key="yt" d="M21.6 7.2a2.6 2.6 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.6 2.6 0 0 0 2.4 7.2 27 27 0 0 0 2 12a27 27 0 0 0 .4 4.8 2.6 2.6 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.6 2.6 0 0 0 1.8-1.8A27 27 0 0 0 22 12a27 27 0 0 0-.4-4.8zM10 15V9l5.2 3z" />],
+    ['X', 'https://x.com', <path key="x" d="M17.8 3h3.1l-6.8 7.8L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.3-8.3L2 3h6.3l4.4 5.9zm-1.1 16.2h1.7L7.4 4.7H5.6z" />],
+];
+
+/** Footer gelap bergaya editorial. Alamat, telepon, dan jam buka diambil dari Pengaturan Toko. */
 const Footer = () => {
+    const settings = useStoreSettings();
+    const hours = formatOpeningHours(settings?.opening_hours);
+
     return (
-        <footer className="bg-[#fdfbf7] relative overflow-hidden border-t border-[#8B5A2B]/10">
-            {/* The Watermark */}
-            <div className="absolute -bottom-10 -left-10 opacity-5 pointer-events-none transform scale-150">
-                <span className="material-symbols-outlined text-[300px] text-[#8B5A2B]">local_cafe</span>
-            </div>
-
-            <div className="max-w-7xl mx-auto px-4 py-16 relative z-10">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-                    {/* Column 1 (Brand) */}
-                    <div>
-                        <h2 className="font-serif text-3xl font-bold text-[#8B5A2B] tracking-tight">
-                            CafeNusantara
-                        </h2>
-                    </div>
-
-                    {/* Column 2 (Customer Center) */}
-                    <div>
-                        <h3 className="font-semibold text-[#8B5A2B] mb-6">
-                            Customer Center
-                        </h3>
-                        <div className="flex flex-col gap-4">
-                            <div className="flex items-start gap-3 text-sm text-gray-700">
-                                <span className="material-symbols-outlined text-[#8B5A2B] mt-0.5 text-[20px]">location_on</span>
-                                <p>Thamrin Plaza, Jl. MH Thamrin No. 10, Jakarta Pusat</p>
-                            </div>
-                            <div className="flex items-center gap-3 text-sm text-gray-700">
-                                <span className="material-symbols-outlined text-[#8B5A2B] text-[20px]">call</span>
-                                <p>0812-1111-8456</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Column 3 (Consumer Complaints) */}
-                    <div>
-                        <h3 className="font-semibold text-[#8B5A2B] mb-6">
-                            Consumer Complaints Service Contact Information
-                        </h3>
-                        <p className="text-sm text-gray-700 mb-2 leading-relaxed">
-                            Directorate General of Consumer Protection and Trade Compliance, Ministry of Trade of the Republic of Indonesia
-                        </p>
-                        <p className="text-sm text-gray-700 italic">
-                            WhatsApp Ditjen PKTN: 0853-1111-1010
-                        </p>
+        <footer className="bg-espresso text-stone-300">
+            <div className="max-w-7xl mx-auto px-5 md:px-10 pt-20 pb-12 grid gap-12 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+                <div>
+                    <p className="font-display text-3xl text-cream">{settings?.store_name || 'Cafe Nusantara'}</p>
+                    <p className="mt-4 text-sm leading-relaxed max-w-xs">Kopi nusantara yang diseduh pelan, untuk hari-hari yang ingin dinikmati.</p>
+                    <div className="flex gap-3 mt-6">
+                        {SOCIALS.map(([label, href, path]) => (
+                            <a key={label} href={href} target="_blank" rel="noopener noreferrer" aria-label={label}
+                                className="h-10 w-10 rounded-full border border-espresso-3 flex items-center justify-center hover:border-stone-400 hover:text-cream transition-colors">
+                                <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor" aria-hidden="true">{path}</svg>
+                            </a>
+                        ))}
                     </div>
                 </div>
 
+                <div>
+                    <p className="label-caps text-stone-500 mb-5">Kunjungi</p>
+                    <p className="text-sm leading-relaxed">{settings?.store_address || 'Alamat belum diatur'}</p>
+                    {settings?.store_phone && <p className="text-sm mt-3">{settings.store_phone}</p>}
+                    <Link to="/locations" className="inline-block mt-4 text-sm text-cream border-b border-stone-500 hover:border-cream">Petunjuk arah</Link>
+                </div>
+
+                <div>
+                    <p className="label-caps text-stone-500 mb-5">Jam buka</p>
+                    <ul className="space-y-2 text-sm">
+                        {hours.map(({ label, value }) => (
+                            <li key={label} className="flex justify-between gap-4"><span>{label}</span><span className="text-cream tabular">{value}</span></li>
+                        ))}
+                    </ul>
+                </div>
+
+                <div>
+                    <p className="label-caps text-stone-500 mb-5">Jelajahi</p>
+                    <ul className="space-y-2 text-sm">
+                        {[['/menu', 'Menu & pesan'], ['/about', 'Cerita kami'], ['/reviews', 'Ulasan'], ['/profile', 'Akun saya']].map(([to, label]) => (
+                            <li key={to}><Link to={to} className="hover:text-cream transition-colors">{label}</Link></li>
+                        ))}
+                    </ul>
+                </div>
             </div>
 
-            {/* Bottom Bar */}
-            <div className="max-w-7xl mx-auto px-4 relative z-10 border-t border-[#8B5A2B]/20 py-6">
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                    <p className="text-xs text-gray-500">
-                        © 2026 CafeNusantara. All rights reserved &bull; Terms and Conditions &bull; Privacy Policy
-                    </p>
-                    
-                    <div className="flex items-center gap-6">
-                        {/* YouTube */}
-                        <a href="https://youtube.com" target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="text-gray-500 hover:text-[#8B5A2B] transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                                <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path>
-                                <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon>
-                            </svg>
-                        </a>
-                        {/* X / Twitter */}
-                        <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" aria-label="X" className="text-gray-500 hover:text-[#8B5A2B] transition-colors">
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.007 4.15H5.059z" />
-                            </svg>
-                        </a>
-                        {/* Instagram */}
-                        <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-gray-500 hover:text-[#8B5A2B] transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                            </svg>
-                        </a>
-                        {/* LinkedIn */}
-                        <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="text-gray-500 hover:text-[#8B5A2B] transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                                <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path>
-                                <rect x="2" y="9" width="4" height="12"></rect>
-                                <circle cx="4" cy="4" r="2"></circle>
-                            </svg>
-                        </a>
-                    </div>
-                </div>
+            <div className="max-w-7xl mx-auto px-5 md:px-10 py-8 border-t border-espresso-3 grid gap-4 md:grid-cols-2 text-xs text-stone-500">
+                <p>© {new Date().getFullYear()} {settings?.store_name || 'Cafe Nusantara'}. Hak cipta dilindungi.</p>
+                <p className="md:text-right leading-relaxed">
+                    Layanan pengaduan konsumen: Direktorat Jenderal Perlindungan Konsumen dan Tertib Niaga, Kementerian Perdagangan RI · WhatsApp 0853-1111-1010
+                </p>
             </div>
         </footer>
     );

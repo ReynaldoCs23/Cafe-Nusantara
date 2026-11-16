@@ -9,10 +9,8 @@ class CategoryController extends Controller
 {
     public function index()
     {
-        $categories = Category::all();
-        
         return response()->json([
-            'data' => $categories
-        ], 200);
+            'data' => Category::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(),
+        ]);
     }
 }

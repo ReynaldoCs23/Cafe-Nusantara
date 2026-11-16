@@ -1,169 +1,116 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import api from '../../api/axios';
+import PageIntro from '../../components/public/PageIntro';
+import { Field, Icon, Spinner } from '../../components/ui';
+import { apiErrorMessage } from '../../utils/pos';
 
+const Stars = ({ rating, size = 'text-[18px]' }) => (
+    <span className="flex text-primary" aria-label={`${rating} dari 5 bintang`}>
+        {[1, 2, 3, 4, 5].map((s) => <Icon key={s} name="star" filled={s <= rating} className={`${size} ${s <= rating ? '' : 'opacity-25'}`} />)}
+    </span>
+);
+
+/** Ulasan pelanggan dan formulir untuk mengirim ulasan baru. */
 const Reviews = () => {
-    const [reviews, setReviews] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    // Form state
-    const [formData, setFormData] = useState({
-        customer_name: '',
-        rating: 5,
-        comment: ''
-    });
+    const [reviews, setReviews] = useState(null);
+    const [form, setForm] = useState({ customer_name: '', rating: 5, comment: '' });
     const [submitting, setSubmitting] = useState(false);
-    const [successMessage, setSuccessMessage] = useState('');
+    const [message, setMessage] = useState(null);
 
-    useEffect(() => {
-        fetchReviews();
+    const load = useCallback(async () => {
+        const res = await api.get('/reviews');
+        setReviews(res.data.data || []);
     }, []);
 
-    const fetchReviews = async () => {
-        try {
-            const res = await api.get('/reviews');
-            setReviews(res.data.data);
-        } catch (error) {
-            console.error("Backend Error Details:", error.response?.data);
-            console.error("Failed to fetch reviews", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    useEffect(() => {
+        load().catch(() => setReviews([]));
+    }, [load]);
 
-    const handleRatingClick = (rating) => {
-        setFormData({ ...formData, rating });
-    };
-
-    const handleSubmit = async (e) => {
+    const submit = async (e) => {
         e.preventDefault();
         setSubmitting(true);
-        setSuccessMessage('');
-
+        setMessage(null);
         try {
-            await api.post('/reviews', formData);
-            setSuccessMessage('Terima kasih! Ulasan Anda telah berhasil dikirim.');
-            setFormData({ customer_name: '', rating: 5, comment: '' });
-            fetchReviews(); // Refresh the list
-        } catch (error) {
-            console.error("Backend Error Details:", error.response?.data);
-            console.error("Failed to submit review", error);
-            const errorMsg = error.response?.data?.message || 'Gagal mengirim ulasan. Silakan coba lagi.';
-            alert(errorMsg);
+            await api.post('/reviews', form);
+            setMessage({ type: 'success', text: 'Terima kasih! Ulasan Anda sudah kami terima.' });
+            setForm({ customer_name: '', rating: 5, comment: '' });
+            await load();
+        } catch (err) {
+            setMessage({ type: 'error', text: apiErrorMessage(err, 'Gagal mengirim ulasan. Silakan coba lagi.') });
         } finally {
             setSubmitting(false);
         }
     };
 
-    if (loading) {
-        return <div className="min-h-[50vh] flex items-center justify-center font-label-caps text-on-surface-variant">Loading...</div>;
-    }
+    const average = reviews?.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) : 0;
 
     return (
-        <div className="animate-fade-in pb-20">
-            {/* Header Area */}
-            <div className="w-full bg-surface-container-low/70 py-16 text-center border-b border-outline-variant/30 mb-12">
-                <h1 className="font-display-lg text-4xl md:text-5xl text-on-surface font-bold tracking-tight">Apa Kata Mereka</h1>
-                <p className="font-body-lg text-lg text-on-surface-variant mt-4 max-w-2xl mx-auto">Pengalaman berkesan dari para penikmat kopi yang telah singgah di CafeNusantara.</p>
-            </div>
+        <div className="animate-fade-in pb-32">
+            <PageIntro eyebrow="Ulasan" title="Kata mereka yang pernah singgah.">
+                {reviews?.length > 0 && (
+                    <div className="mt-8 flex items-center gap-4">
+                        <span className="font-display text-5xl tabular">{average.toFixed(1)}</span>
+                        <div>
+                            <Stars rating={Math.round(average)} size="text-[20px]" />
+                            <p className="text-sm text-on-surface-variant mt-1">dari {reviews.length} ulasan</p>
+                        </div>
+                    </div>
+                )}
+            </PageIntro>
 
-            {/* Form Section */}
-            <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mb-16">
-                <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100">
-                    <h2 className="font-headline-lg text-2xl font-bold text-gray-900 mb-6 text-center">Bagikan Pengalaman Anda</h2>
-                    
-                    {successMessage && (
-                        <div className="mb-6 p-4 bg-green-50 text-green-700 border border-green-200 rounded-xl text-center font-medium">
-                            {successMessage}
+            <div className="max-w-7xl mx-auto px-5 md:px-10 grid lg:grid-cols-[1fr_400px] gap-12 lg:gap-20 items-start">
+                <div>
+                    {!reviews ? (
+                        <div className="py-20 flex justify-center text-on-surface-variant"><Spinner /></div>
+                    ) : reviews.length === 0 ? (
+                        <p className="py-20 text-on-surface-variant">Belum ada ulasan. Jadilah yang pertama berbagi cerita.</p>
+                    ) : (
+                        <div className="columns-1 md:columns-2 gap-6 [&>*]:mb-6">
+                            {reviews.map((r) => (
+                                <figure key={r.id} className="break-inside-avoid card p-7">
+                                    <Stars rating={r.rating} />
+                                    <blockquote className="mt-5 font-display text-xl leading-relaxed text-ink">“{r.comment}”</blockquote>
+                                    <figcaption className="mt-6 flex items-center gap-3">
+                                        <span className="h-10 w-10 rounded-full bg-surface-container text-ink font-semibold flex items-center justify-center">{r.customer_name.charAt(0).toUpperCase()}</span>
+                                        <span>
+                                            <span className="block text-sm font-semibold">{r.customer_name}</span>
+                                            <span className="block text-xs text-on-surface-variant">{new Date(r.created_at).toLocaleDateString('id-ID', { dateStyle: 'long' })}</span>
+                                        </span>
+                                    </figcaption>
+                                </figure>
+                            ))}
                         </div>
                     )}
+                </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
+                <aside className="card p-8 lg:sticky lg:top-28">
+                    <h2 className="font-display text-2xl">Bagikan pengalaman Anda</h2>
+                    <p className="text-sm text-on-surface-variant mt-2">Masukan Anda membantu kami menyeduh lebih baik.</p>
+                    <form onSubmit={submit} className="mt-6 space-y-5">
+                        <Field label="Nama">
+                            <input className="input" required maxLength={100} value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} />
+                        </Field>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Nama Anda</label>
-                            <input 
-                                type="text" 
-                                required
-                                value={formData.customer_name}
-                                onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
-                                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                                placeholder="Tuliskan nama Anda..."
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Penilaian</label>
-                            <div className="flex gap-2 text-3xl">
-                                {[1, 2, 3, 4, 5].map((star) => (
-                                    <button 
-                                        type="button" 
-                                        key={star} 
-                                        onClick={() => handleRatingClick(star)}
-                                        className={`material-symbols-outlined transition-colors ${star <= formData.rating ? 'text-primary' : 'text-gray-200 hover:text-primary/50'}`}
-                                        style={{ fontVariationSettings: star <= formData.rating ? "'FILL' 1" : "'FILL' 0" }}
-                                    >
-                                        star
+                            <span className="label-caps block mb-2">Penilaian</span>
+                            <div className="flex gap-1" role="radiogroup" aria-label="Penilaian">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                    <button type="button" key={s} role="radio" aria-checked={form.rating === s} aria-label={`${s} bintang`} onClick={() => setForm({ ...form, rating: s })}
+                                        className="h-10 w-10 flex items-center justify-center rounded-full hover:bg-surface-container text-primary">
+                                        <Icon name="star" filled={s <= form.rating} className={`text-[28px] ${s <= form.rating ? '' : 'opacity-30'}`} />
                                     </button>
                                 ))}
                             </div>
                         </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Ulasan</label>
-                            <textarea 
-                                required
-                                value={formData.comment}
-                                onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-                                className="w-full border border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
-                                rows="4"
-                                placeholder="Ceritakan pengalaman Anda di CafeNusantara..."
-                            ></textarea>
-                        </div>
-
-                        <button 
-                            type="submit" 
-                            disabled={submitting}
-                            className="w-full bg-primary text-white font-bold tracking-widest uppercase py-4 rounded-xl hover:bg-[#7a3c28] transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {submitting ? 'Mengirim...' : 'Kirim Ulasan'}
-                        </button>
+                        <Field label="Ulasan">
+                            <textarea className="input resize-none" rows="4" required maxLength={1000} value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} placeholder="Ceritakan pengalaman Anda..." />
+                        </Field>
+                        {message && (
+                            <p className={`text-sm rounded-xl px-4 py-3 ${message.type === 'success' ? 'bg-sage-soft text-sage' : 'bg-[#fff4f2] text-error'}`} role="status">{message.text}</p>
+                        )}
+                        <button className="btn-primary btn-lg rounded-full w-full" disabled={submitting}>{submitting ? 'Mengirim...' : 'Kirim ulasan'}</button>
                     </form>
-                </div>
-            </section>
-
-            {/* Customer Review Section */}
-            <section className="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-gray-100">
-                {reviews.length === 0 ? (
-                    <div className="text-center py-12 text-gray-500 font-body-lg">
-                        Belum ada ulasan. Jadilah yang pertama memberikan ulasan!
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-12">
-                        {reviews.map((review) => (
-                            <div key={review.id} className="bg-surface/80 backdrop-blur-md p-8 rounded-xl shadow-sm border border-outline-variant/20 hover:border-primary/50 transition-colors flex flex-col">
-                                <div className="flex text-primary mb-4">
-                                    {[1, 2, 3, 4, 5].map((star) => (
-                                        <span key={star} className="material-symbols-outlined" style={{ fontVariationSettings: star <= review.rating ? "'FILL' 1" : "'FILL' 0" }}>star</span>
-                                    ))}
-                                </div>
-                                <p className="font-body-md text-lg text-on-surface-variant mb-6 min-h-[100px] italic flex-grow">
-                                    "{review.comment}"
-                                </p>
-                                <div className="flex items-center gap-4 mt-auto">
-                                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xl uppercase">
-                                        {review.customer_name.charAt(0)}
-                                    </div>
-                                    <div>
-                                        <div className="font-label-sm text-sm font-bold text-on-surface">{review.customer_name}</div>
-                                        <div className="font-label-caps text-xs tracking-wider text-on-surface-variant opacity-70">
-                                            {new Date(review.created_at).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' })}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </section>
+                </aside>
+            </div>
         </div>
     );
 };

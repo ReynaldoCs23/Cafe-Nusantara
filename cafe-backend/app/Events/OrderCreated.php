@@ -3,8 +3,8 @@
 namespace App\Events;
 
 use App\Models\Order;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -13,25 +13,20 @@ class OrderCreated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $order;
-
-    public function __construct(Order $order)
+    public function __construct(public Order $order)
     {
-        $this->order = $order;
     }
 
+    /** Hanya staf yang boleh mendengar (lihat routes/channels.php). */
     public function broadcastOn(): array
     {
-        return [
-            new Channel('admin.orders'),
-        ];
+        return [new PrivateChannel('staff.orders')];
     }
 
     public function broadcastWith(): array
     {
-        $this->order->loadMissing('items.product');
-        return [
-            'order' => $this->order->toArray()
-        ];
+        $this->order->loadMissing('items', 'diningTable:id,name');
+
+        return ['order' => $this->order->toArray()];
     }
 }

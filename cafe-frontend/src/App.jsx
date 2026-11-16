@@ -9,7 +9,17 @@ import ContentManagement from './pages/admin/ContentManagement';
 import ReviewsManagement from './pages/admin/ReviewsManagement';
 import UserManagement from './pages/admin/UserManagement';
 import Reports from './pages/admin/Reports';
+import StoreSettings from './pages/admin/StoreSettings';
+import TableManagement from './pages/admin/TableManagement';
+import ShiftHistory from './pages/admin/ShiftHistory';
+import StaffShell from './components/staff/StaffShell';
+import Pos from './pages/staff/Pos';
+import Kitchen from './pages/staff/Kitchen';
+import Handoff from './pages/staff/Handoff';
+import ReadyBoard from './pages/public/ReadyBoard';
+import TableEntry from './pages/public/TableEntry';
 import { CartProvider } from './context/CartContext';
+import { useAuth, landingPathFor } from './context/AuthContext';
 import PublicLayout from './components/PublicLayout';
 import Menu from './pages/public/Menu';
 import Checkout from './pages/public/Checkout';
@@ -19,45 +29,80 @@ import About from './pages/public/About';
 import Reviews from './pages/public/Reviews';
 import Locations from './pages/public/Locations';
 import Profile from './pages/public/Profile';
-
+import OrderStatus from './pages/public/OrderStatus';
 import CustomerRegister from './pages/public/CustomerRegister';
 
+const OWNER_MANAGER = ['owner', 'manager'];
+
+const AdminIndex = () => {
+    const { user } = useAuth();
+    return <Navigate replace to={landingPathFor(user)} />;
+};
+
 function App() {
-  return (
-    <CartProvider>
-      <Routes>
-        {/* Public Storefront Routes */}
-        <Route element={<PublicLayout />}>
-          <Route path="/" element={<Home />} />
-          <Route path="/menu" element={<Menu />} />
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/reviews" element={<Reviews />} />
-          <Route path="/locations" element={<Locations />} />
-          <Route path="/profile" element={<Profile />} />
-        </Route>
+    return (
+        <CartProvider>
+            <Routes>
+                {/* Storefront & pemesanan pelanggan */}
+                <Route element={<PublicLayout />}>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/menu" element={<Menu />} />
+                    <Route path="/cart" element={<Cart />} />
+                    <Route path="/checkout" element={<Checkout />} />
+                    <Route path="/order/:orderNumber" element={<OrderStatus />} />
+                    <Route path="/about" element={<About />} />
+                    <Route path="/reviews" element={<Reviews />} />
+                    <Route path="/locations" element={<Locations />} />
+                    <Route path="/profile" element={<Profile />} />
+                </Route>
 
-        {/* Auth Routes */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<CustomerRegister />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/antrean" element={<ReadyBoard />} />
+                <Route path="/t/:token" element={<TableEntry />} />
 
-        {/* Protected Admin Routes */}
-        <Route path="/admin" element={<ProtectedRoute />}>
-          <Route element={<AdminLayout />}>
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="orders" element={<OrderManagement />} />
-            <Route path="catalog" element={<CatalogManagement />} />
-            <Route path="content" element={<ContentManagement />} />
-            <Route path="reviews" element={<ReviewsManagement />} />
-            <Route path="users" element={<UserManagement />} />
-            <Route path="reports" element={<Reports />} />
-            <Route index element={<Navigate replace to="dashboard" />} />
-          </Route>
-        </Route>
-      </Routes>
-    </CartProvider>
-  );
+                {/* Layar operasional full-screen */}
+                <Route element={<ProtectedRoute roles={['owner', 'manager', 'cashier']} />}>
+                    <Route element={<StaffShell />}>
+                        <Route path="/pos" element={<Pos />} />
+                    </Route>
+                </Route>
+                <Route element={<ProtectedRoute roles={['owner', 'manager', 'cashier', 'barista']} />}>
+                    <Route element={<StaffShell dark />}>
+                        <Route path="/kds" element={<Kitchen />} />
+                    </Route>
+                </Route>
+                <Route element={<ProtectedRoute />}>
+                    <Route element={<StaffShell />}>
+                        <Route path="/antar" element={<Handoff />} />
+                    </Route>
+                </Route>
+                <Route path="/register" element={<CustomerRegister />} />
+
+                {/* Back-office staf, dibatasi per peran */}
+                <Route path="/admin" element={<ProtectedRoute />}>
+                    <Route element={<AdminLayout />}>
+                        <Route index element={<AdminIndex />} />
+                        <Route path="orders" element={<OrderManagement />} />
+
+                        <Route element={<ProtectedRoute roles={OWNER_MANAGER} />}>
+                            <Route path="dashboard" element={<Dashboard />} />
+                            <Route path="reports" element={<Reports />} />
+                            <Route path="catalog" element={<CatalogManagement />} />
+                            <Route path="content" element={<ContentManagement />} />
+                            <Route path="reviews" element={<ReviewsManagement />} />
+                            <Route path="tables" element={<TableManagement />} />
+                            <Route path="shifts" element={<ShiftHistory />} />
+                        </Route>
+
+                        <Route element={<ProtectedRoute roles={['owner']} />}>
+                            <Route path="users" element={<UserManagement />} />
+                            <Route path="settings" element={<StoreSettings />} />
+                        </Route>
+                    </Route>
+                </Route>
+            </Routes>
+        </CartProvider>
+    );
 }
 
 export default App;

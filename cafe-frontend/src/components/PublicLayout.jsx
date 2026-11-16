@@ -1,135 +1,136 @@
-import React, { useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Outlet, Link, NavLink, useLocation } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, landingPathFor } from '../context/AuthContext';
+import { Icon } from './ui';
 import Footer from './Footer';
+import TableBanner from './public/TableBanner';
+import { useTableSession } from '../hooks/useTableSession';
 
+const LINKS = [
+    ['/', 'Beranda'],
+    ['/menu', 'Menu'],
+    ['/about', 'Cerita Kami'],
+    ['/reviews', 'Ulasan'],
+    ['/locations', 'Kunjungi'],
+];
+
+/** Kerangka situs publik: header tipis bergaya editorial, menu seluler, footer. */
 const PublicLayout = () => {
-    const { cartItems } = useCart();
-    const { isAuthenticated, user, logout } = useAuth();
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const { itemCount } = useCart();
+    const { isAuthenticated, user, logout, isStaff } = useAuth();
+    const [mobileOpen, setMobileOpen] = useState(false);
+    const [accountOpen, setAccountOpen] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
     const location = useLocation();
+    const table = useTableSession();
 
-    const closeMobileMenu = () => {
-        setIsMobileMenuOpen(false);
-    };
+    useEffect(() => {
+        setMobileOpen(false);
+        setAccountOpen(false);
+        window.scrollTo({ top: 0 });
+    }, [location.pathname]);
 
-    const isActive = (path) => location.pathname === path;
+    useEffect(() => {
+        const onScroll = () => setScrolled(window.scrollY > 8);
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
+
+    const accountPath = isStaff ? landingPathFor(user) : '/profile';
+    const navClass = ({ isActive }) => `text-[12px] font-semibold uppercase tracking-[0.16em] py-1.5 border-b transition-colors duration-300 ${
+        isActive ? 'text-ink border-primary' : 'text-on-surface-variant border-transparent hover:text-ink'
+    }`;
 
     return (
-        <div className="min-h-screen flex flex-col font-body-md bg-[#F9F8F6] text-on-surface">
-            
-            {/* TopNavBar */}
-            <nav className="w-full fixed top-0 z-50 bg-[#F9F8F6] border-b border-gray-200 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex justify-between items-center">
-                    <Link to="/" onClick={closeMobileMenu} className="text-2xl font-bold text-primary tracking-tight z-50">
-                        CafeNusantara
+        <div className="min-h-screen flex flex-col bg-cream text-ink">
+            <header className={`fixed inset-x-0 top-0 z-50 transition-colors duration-300 ${scrolled || mobileOpen ? 'bg-cream/95 backdrop-blur border-b border-hairline' : 'bg-cream/70 backdrop-blur-sm border-b border-transparent'}`}>
+                <div className="max-w-7xl mx-auto px-5 md:px-10 h-20 flex items-center justify-between gap-6">
+                    <Link to="/" className="font-display text-[26px] leading-none text-ink">
+                        Cafe <span className="text-primary">Nusantara</span>
                     </Link>
-                    
-                    {/* Desktop Menu */}
-                    <div className="hidden md:flex gap-8 items-center">
-                        <Link to="/" className={`font-medium transition-colors duration-300 ${isActive('/') ? 'text-primary' : 'text-on-surface-variant hover:text-primary'}`}>
-                            Beranda
-                        </Link>
-                        <Link to="/menu" className={`font-medium transition-colors duration-300 ${isActive('/menu') ? 'text-primary' : 'text-on-surface-variant hover:text-primary'}`}>
-                            Menu
-                        </Link>
-                        <Link to="/reviews" className={`font-medium transition-colors duration-300 ${isActive('/reviews') ? 'text-primary' : 'text-on-surface-variant hover:text-primary'}`}>
-                            Ulasan
-                        </Link>
-                        <Link to="/about" className={`font-medium transition-colors duration-300 ${isActive('/about') ? 'text-primary' : 'text-on-surface-variant hover:text-primary'}`}>
-                            Tentang Kami
-                        </Link>
-                        <Link to="/locations" className={`font-medium transition-colors duration-300 ${isActive('/locations') ? 'text-primary' : 'text-on-surface-variant hover:text-primary'}`}>
-                            Lokasi
-                        </Link>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 md:gap-6 z-50">
-                        <Link to="/cart" onClick={closeMobileMenu} className="relative p-2 text-on-surface-variant hover:text-primary transition-colors duration-300 flex items-center">
-                            <span className="material-symbols-outlined text-2xl">shopping_bag</span>
-                            {cartItems.length > 0 && (
-                                <span className="absolute top-0 right-0 bg-primary text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center border border-white">
-                                    {cartItems.reduce((acc, item) => acc + item.quantity, 0)}
-                                </span>
+
+                    <nav className="hidden lg:flex items-center gap-9" aria-label="Navigasi utama">
+                        {LINKS.map(([to, label]) => <NavLink key={to} to={to} end={to === '/'} className={navClass}>{label}</NavLink>)}
+                    </nav>
+
+                    <div className="flex items-center gap-2 md:gap-4">
+                        <Link to="/cart" className="relative h-11 w-11 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors" aria-label={`Keranjang, ${itemCount} item`}>
+                            <Icon name="shopping_bag" className="text-[24px]" />
+                            {itemCount > 0 && (
+                                <span className="absolute top-1 right-0.5 h-5 min-w-5 px-1 rounded-full bg-primary text-white text-[11px] font-semibold flex items-center justify-center tabular">{itemCount}</span>
                             )}
                         </Link>
-                        
+
                         {isAuthenticated ? (
-                            <div className="hidden md:flex items-center gap-4 relative group">
-                                <Link to={user?.role === 'admin' ? '/admin/dashboard' : '/profile'} onClick={closeMobileMenu} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg uppercase border border-primary/20">
-                                        {user?.name ? user.name.charAt(0) : 'U'}
-                                    </div>
-                                </Link>
-                                
-                                {/* Dropdown */}
-                                <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 flex flex-col overflow-hidden">
-                                    <div className="px-4 py-3 border-b border-gray-50">
-                                        <p className="text-sm font-bold text-gray-900 truncate">{user?.name}</p>
-                                        <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-                                    </div>
-                                    <Link to={user?.role === 'admin' ? '/admin/dashboard' : '/profile'} className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
-                                        <span className="material-symbols-outlined text-[18px]">person</span> Profil
-                                    </Link>
-                                    <button onClick={logout} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 text-left w-full">
-                                        <span className="material-symbols-outlined text-[18px]">logout</span> Keluar
-                                    </button>
-                                </div>
+                            <div className="relative hidden md:block">
+                                <button onClick={() => setAccountOpen((v) => !v)} className="flex items-center gap-2 rounded-full border border-hairline pl-1 pr-3 py-1 hover:border-ink/30" aria-expanded={accountOpen}>
+                                    <span className="h-8 w-8 rounded-full bg-primary text-white text-sm font-semibold flex items-center justify-center">{(user?.name || 'U').charAt(0).toUpperCase()}</span>
+                                    <span className="text-sm font-medium max-w-[120px] truncate">{user?.name?.split(' ')[0]}</span>
+                                    <Icon name="expand_more" className="text-[18px] text-on-surface-variant" />
+                                </button>
+                                {accountOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setAccountOpen(false)} />
+                                        <div className="absolute right-0 mt-3 w-60 z-50 card py-2 animate-slide-up">
+                                            <div className="px-4 py-3 border-b border-hairline">
+                                                <p className="text-sm font-semibold truncate">{user?.name}</p>
+                                                <p className="text-xs text-on-surface-variant truncate">{user?.email}</p>
+                                            </div>
+                                            <Link to={accountPath} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-surface-container-low">
+                                                <Icon name={isStaff ? 'dashboard' : 'person'} className="text-[20px]" /> {isStaff ? 'Buka layar kerja' : 'Akun & pesanan saya'}
+                                            </Link>
+                                            <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-error hover:bg-surface-container-low">
+                                                <Icon name="logout" className="text-[20px]" /> Keluar
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         ) : (
-                            <div className="hidden md:flex items-center gap-4">
-                                <Link to="/login" className="text-primary font-bold hover:text-[#7a3c28] transition-colors">Masuk</Link>
-                                <Link to="/register" className="bg-primary text-white px-4 py-2 rounded-full font-bold hover:bg-[#7a3c28] transition-colors">Daftar</Link>
+                            <div className="hidden md:flex items-center gap-2">
+                                <Link to="/login" className="btn-ghost">Masuk</Link>
+                                <Link to="/menu" className="btn-primary">Pesan sekarang</Link>
                             </div>
                         )}
 
-                        {/* Hamburger Button */}
-                        <button 
-                            className="md:hidden p-2 text-on-surface-variant hover:text-primary transition-colors focus:outline-none"
-                            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                        >
-                            <span className="material-symbols-outlined text-3xl">
-                                {isMobileMenuOpen ? 'close' : 'menu'}
-                            </span>
+                        <button className="lg:hidden h-11 w-11 flex items-center justify-center rounded-full hover:bg-surface-container" onClick={() => setMobileOpen((v) => !v)} aria-label="Menu" aria-expanded={mobileOpen}>
+                            <Icon name={mobileOpen ? 'close' : 'menu'} className="text-[26px]" />
                         </button>
                     </div>
                 </div>
 
-                {/* Mobile Menu */}
-                {isMobileMenuOpen && (
-                    <div className="md:hidden absolute top-20 left-0 w-full bg-[#F9F8F6] border-b border-gray-200 shadow-lg flex flex-col py-4 px-6 gap-4 z-40 animate-fade-in">
-                        <Link to="/" onClick={closeMobileMenu} className={`text-lg font-medium py-2 border-b border-gray-100 ${isActive('/') ? 'text-primary' : 'text-on-surface-variant'}`}>Beranda</Link>
-                        <Link to="/menu" onClick={closeMobileMenu} className={`text-lg font-medium py-2 border-b border-gray-100 ${isActive('/menu') ? 'text-primary' : 'text-on-surface-variant'}`}>Menu</Link>
-                        <Link to="/reviews" onClick={closeMobileMenu} className={`text-lg font-medium py-2 border-b border-gray-100 ${isActive('/reviews') ? 'text-primary' : 'text-on-surface-variant'}`}>Ulasan</Link>
-                        <Link to="/about" onClick={closeMobileMenu} className={`text-lg font-medium py-2 border-b border-gray-100 ${isActive('/about') ? 'text-primary' : 'text-on-surface-variant'}`}>Tentang Kami</Link>
-                        <Link to="/locations" onClick={closeMobileMenu} className={`text-lg font-medium py-2 border-b border-gray-100 ${isActive('/locations') ? 'text-primary' : 'text-on-surface-variant'}`}>Lokasi</Link>
-                        
-                        {isAuthenticated ? (
-                            <>
-                                <Link to={user?.role === 'admin' ? '/admin/dashboard' : '/profile'} onClick={closeMobileMenu} className="text-lg font-medium py-2 border-b border-gray-100 text-primary flex items-center gap-2">
-                                    <span className="material-symbols-outlined">person</span> Profil ({user?.name})
-                                </Link>
-                                <button onClick={() => { logout(); closeMobileMenu(); }} className="text-lg font-medium py-2 text-red-600 flex items-center gap-2 text-left">
-                                    <span className="material-symbols-outlined">logout</span> Keluar
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <Link to="/login" onClick={closeMobileMenu} className="text-lg font-medium py-2 border-b border-gray-100 text-on-surface-variant">Masuk</Link>
-                                <Link to="/register" onClick={closeMobileMenu} className="text-lg font-medium py-2 text-primary font-bold">Daftar Akun</Link>
-                            </>
-                        )}
-                    </div>
-                )}
-            </nav>
+                {table && <TableBanner table={table} />}
 
-            {/* Main Content Area */}
-            <main className="flex-grow pt-20 w-full">
+                {mobileOpen && (
+                    <nav className="lg:hidden border-t border-hairline bg-cream px-5 pb-8 pt-4 animate-slide-up" aria-label="Navigasi seluler">
+                        {LINKS.map(([to, label]) => (
+                            <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `flex items-center justify-between py-4 border-b border-hairline font-display text-2xl ${isActive ? 'text-primary' : 'text-ink'}`}>
+                                {label} <Icon name="arrow_forward" className="text-[20px] text-on-surface-variant" />
+                            </NavLink>
+                        ))}
+                        <div className="grid grid-cols-2 gap-3 mt-6">
+                            {isAuthenticated ? (
+                                <>
+                                    <Link to={accountPath} className="btn-outline">{isStaff ? 'Layar kerja' : 'Akun saya'}</Link>
+                                    <button onClick={logout} className="btn-outline text-error">Keluar</button>
+                                </>
+                            ) : (
+                                <>
+                                    <Link to="/login" className="btn-outline">Masuk</Link>
+                                    <Link to="/register" className="btn-primary">Daftar</Link>
+                                </>
+                            )}
+                        </div>
+                    </nav>
+                )}
+            </header>
+
+            <main className={`flex-grow w-full ${table ? 'pt-[124px]' : 'pt-20'}`}>
                 <Outlet />
             </main>
 
-            {/* Footer */}
             <Footer />
         </div>
     );

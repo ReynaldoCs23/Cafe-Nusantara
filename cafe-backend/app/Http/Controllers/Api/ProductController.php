@@ -4,84 +4,69 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Models\Review;
+use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
+    private const MENU_RELATIONS = [
+        'category:id,name,slug,sort_order',
+        'modifierGroups.modifiers',
+    ];
+
     public function index()
     {
-        $products = Product::with('category')
+        $products = Product::with(self::MENU_RELATIONS)
             ->where('is_active', true)
-            ->get();
-            
-        return response()->json([
-            'data' => $products
-        ], 200);
+            ->whereHas('category', fn ($query) => $query->where('is_active', true))
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->each(fn (Product $product) => $product->makeHidden(['stock_quantity']));
+
+        return response()->json(['data' => $products]);
     }
 
-    public function show($id)
+    public function show(string $idOrSlug)
     {
-        $product = Product::with(['category', 'reviews'])
+        $product = Product::with(self::MENU_RELATIONS)
             ->where('is_active', true)
-            ->find($id);
+            ->whereKey((int) $idOrSlug)
+            ->first();
 
-        if (!$product) {
-            return response()->json([
-                'message' => 'Produk tidak ditemukan'
-            ], 404);
+        if (! $product) {
+            return response()->json(['message' => 'Produk tidak ditemukan'], 404);
         }
 
-        return response()->json([
-            'data' => $product
-        ], 200);
+        return response()->json(['data' => $product->makeHidden(['stock_quantity'])]);
     }
 
     public function reviews()
     {
-        try {
-            $reviews = \App\Models\Review::where('is_visible', true)
-                ->orderBy('created_at', 'desc')
-                ->get();
-                
-            return response()->json([
-                'data' => $reviews
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false, 
-                'message' => $e->getMessage(), 
-                'file' => $e->getFile(), 
-                'line' => $e->getLine()
-            ], 500);
-        }
+        $reviews = Review::where('is_visible', true)
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get();
+
+        return response()->json(['data' => $reviews]);
     }
 
-    public function storeReview(\Illuminate\Http\Request $request)
+    public function storeReview(Request $request)
     {
-        try {
-            $validated = $request->validate([
-                'customer_name' => 'required|string|max:255',
-                'rating' => 'required|integer|min:1|max:5',
-                'comment' => 'required|string',
-            ]);
+        $validated = $request->validate([
+            'customer_name' => 'required|string|max:100',
+            'rating' => 'required|integer|min:1|max:5',
+            'comment' => 'required|string|max:1000',
+        ]);
 
-            $review = \App\Models\Review::create([
-                'customer_name' => $validated['customer_name'],
-                'rating' => $validated['rating'],
-                'comment' => $validated['comment'],
-                'is_visible' => true, 
-            ]);
+        $review = Review::create([
+            ...$validated,
+            'is_visible' => true,
+        ]);
 
-            return response()->json([
-                'message' => 'Review submitted successfully',
-                'data' => $review
-            ], 201);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false, 
-                'message' => $e->getMessage(), 
-                'file' => $e->getFile(), 
-                'line' => $e->getLine()
-            ], 500);
-        }
+        return response()->json([
+            'message' => 'Review submitted successfully',
+            'data' => $review,
+        ], 201);
     }
 }

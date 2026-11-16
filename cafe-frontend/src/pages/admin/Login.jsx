@@ -1,163 +1,117 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth, landingPathFor } from '../../context/AuthContext';
 import api from '../../api/axios';
+import { Field, Icon, Segmented } from '../../components/ui';
+import { apiErrorMessage, deviceName } from '../../utils/pos';
 
+/**
+ * Halaman masuk untuk pelanggan dan staf.
+ * Staf di perangkat bersama bisa masuk cepat memakai PIN.
+ */
 const Login = () => {
+    const [mode, setMode] = useState('password');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [pin, setPin] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const [error, setError] = useState('');
     const { login } = useAuth();
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        setError(null);
+        setError('');
         try {
-            const response = await api.post('/login', { username, password });
-            if (response.data.access_token) {
-                login(response.data.access_token, response.data.user);
-                
-                if (response.data.user.role === 'admin') {
-                    navigate('/admin/dashboard');
-                } else {
-                    navigate('/');
-                }
-            }
+            const response = mode === 'pin'
+                ? await api.post('/staff/pin-login', { username: username.trim(), pin, device_name: deviceName() })
+                : await api.post('/login', { username: username.trim(), password, device_name: deviceName() });
+            login(response.data.access_token, response.data.user);
+            navigate(landingPathFor(response.data.user));
         } catch (err) {
-            setError(err.response?.data?.message || 'Login failed. Please try again.');
+            setError(apiErrorMessage(err, 'Gagal masuk. Periksa kembali data Anda.'));
+            setPin('');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex flex-col font-body-md text-on-surface selection:bg-primary-fixed selection:text-on-primary-fixed-variant">
-            {/* Top Navigation */}
-            <header className="w-full top-0 flex justify-center py-12 px-grid-margin">
-                <div className="text-center">
-                    <h1 className="font-headline-md text-headline-md text-primary tracking-tight mb-2">CafeNusantara</h1>
-                    <p className="font-label-caps text-label-caps text-on-surface-variant tracking-widest">PORTAL PELANGGAN</p>
+        <div className="min-h-screen grid lg:grid-cols-2 bg-cream text-ink">
+            {/* Panel brand */}
+            <aside className="hidden lg:flex relative overflow-hidden bg-espresso text-cream p-14 flex-col justify-between">
+                <div className="absolute inset-0 opacity-[0.07] bg-[url('/bg-pattern.svg')] bg-repeat" aria-hidden="true" />
+                <Link to="/" className="relative font-display text-3xl">Cafe Nusantara</Link>
+                <div className="relative max-w-md">
+                    <p className="label-caps text-stone-400 mb-5">Sejak secangkir pertama</p>
+                    <p className="font-display text-5xl leading-[1.15]">Menyeduh ketenangan, melayani dengan sepenuh hati.</p>
                 </div>
-            </header>
+                <p className="relative text-sm text-stone-400">Kasir, dapur, dan pemesanan online dalam satu sistem.</p>
+            </aside>
 
-            {/* Main Content */}
-            <main className="flex-grow flex items-center justify-center px-4 pb-24">
-                <div className="w-full max-w-[440px] bg-surface p-8 md:p-12 border border-[#E5E5E5] rounded-sm animate-fade-in shadow-sm">
-                    <div className="mb-10 text-center">
-                        <h2 className="font-headline-md text-headline-md text-on-surface mb-2">Selamat Datang</h2>
-                        <p className="font-body-md text-body-md text-on-surface-variant">Masuk ke akun Anda untuk melanjutkan.</p>
+            {/* Form */}
+            <main className="flex items-center justify-center px-6 py-16">
+                <div className="w-full max-w-[400px] animate-slide-up">
+                    <Link to="/" className="lg:hidden font-display text-2xl text-primary block mb-10">Cafe Nusantara</Link>
+                    <p className="label-caps mb-3">Selamat datang kembali</p>
+                    <h1 className="page-title mb-2">Masuk ke akun Anda</h1>
+                    <p className="text-on-surface-variant mb-8">Pelanggan dan staf masuk dari halaman yang sama.</p>
+
+                    <div className="mb-8">
+                        <Segmented value={mode} onChange={(m) => { setMode(m); setError(''); }} options={[
+                            ['password', 'Username & password', 'key'],
+                            ['pin', 'PIN staf', 'dialpad'],
+                        ]} />
                     </div>
 
-                    {error && (
-                        <div className="mb-6 p-4 bg-error-container text-on-error-container text-sm rounded">
-                            {error}
-                        </div>
-                    )}
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <Field label="Username">
+                            <input className="input-lg" value={username} onChange={(e) => setUsername(e.target.value)} required autoComplete="username" autoFocus />
+                        </Field>
 
-                    <form onSubmit={handleSubmit} className="space-y-8">
-                        {/* Username */}
-                        <div className="space-y-2">
-                            <label className="font-label-caps text-label-caps text-on-surface-variant" htmlFor="username">Username</label>
-                            <div className="relative group">
-                                <input 
-                                    className="w-full bg-transparent border-b border-outline-variant py-3 pr-10 font-body-md text-body-md transition-all duration-300 focus:border-on-surface" 
-                                    id="username" 
-                                    name="username" 
-                                    type="text" 
-                                    required 
-                                    placeholder="Masukkan username Anda"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                />
-                                <span className="material-symbols-outlined absolute right-0 top-3 text-on-surface-variant group-hover:text-primary transition-colors">person</span>
-                            </div>
-                        </div>
+                        {mode === 'password' ? (
+                            <Field label="Password">
+                                <div className="relative">
+                                    <input className="input-lg pr-12" type={showPassword ? 'text' : 'password'} value={password}
+                                        onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+                                    <button type="button" onClick={() => setShowPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-ink"
+                                        aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}>
+                                        <Icon name={showPassword ? 'visibility_off' : 'visibility'} className="text-[20px]" />
+                                    </button>
+                                </div>
+                            </Field>
+                        ) : (
+                            <Field label="PIN" hint="4–6 digit, diatur oleh owner di menu Pengguna.">
+                                <input className="input-lg tracking-[0.6em] text-center tabular" type="password" inputMode="numeric" pattern="\d{4,6}" maxLength={6}
+                                    value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} required autoComplete="off" />
+                            </Field>
+                        )}
 
-                        {/* Password */}
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-end">
-                                <label className="font-label-caps text-label-caps text-on-surface-variant" htmlFor="password">Kata Sandi</label>
-                                <a className="font-label-caps text-label-caps text-primary hover:opacity-70 transition-opacity" href="#">Lupa Kata Sandi?</a>
-                            </div>
-                            <div className="relative group">
-                                <input 
-                                    className="w-full bg-transparent border-b border-outline-variant py-3 pr-10 font-body-md text-body-md transition-all duration-300 focus:border-on-surface" 
-                                    id="password" 
-                                    name="password" 
-                                    type={showPassword ? "text" : "password"}
-                                    required 
-                                    placeholder="••••••••"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                />
-                                <button 
-                                    type="button" 
-                                    className="absolute right-0 top-3 text-on-surface-variant hover:text-primary transition-colors"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                >
-                                    <span className="material-symbols-outlined">{showPassword ? "visibility_off" : "visibility"}</span>
-                                </button>
-                            </div>
-                        </div>
+                        {error && (
+                            <p className="flex items-start gap-2 rounded-lg bg-[#fff4f2] border border-error/25 px-4 py-3 text-sm text-error" role="alert">
+                                <Icon name="error" className="text-[18px]" /> {error}
+                            </p>
+                        )}
 
-                        {/* Remember Me */}
-                        <div className="flex items-center space-x-3 group cursor-pointer">
-                            <div className="relative flex items-center">
-                                <input className="w-4 h-4 rounded-none border-outline text-primary focus:ring-0 cursor-pointer" id="remember" name="remember" type="checkbox"/>
-                            </div>
-                            <label className="font-body-md text-body-md text-on-surface-variant cursor-pointer group-hover:text-on-surface transition-colors" htmlFor="remember">
-                                Ingat Saya
-                            </label>
-                        </div>
-
-                        {/* Submit Button */}
-                        <div className="pt-4">
-                            <button 
-                                type="submit" 
-                                disabled={loading}
-                                className="w-full bg-primary text-on-primary py-4 px-6 font-label-caps text-label-caps tracking-widest hover:bg-primary-container transition-all duration-500 transform hover:-translate-y-0.5 active:translate-y-0 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
-                            >
-                                {loading ? 'MENGOTENTIKASI...' : 'MASUK SEKARANG'}
-                            </button>
-                        </div>
+                        <button type="submit" disabled={loading} className="btn-primary btn-lg w-full">
+                            {loading ? 'Memeriksa...' : 'Masuk'}
+                        </button>
                     </form>
 
-                    <div className="mt-8 text-center">
-                        <p className="font-body-md text-on-surface-variant">
-                            Belum punya akun? <a href="/register" className="text-primary font-bold hover:underline">Daftar sekarang</a>
+                    {mode === 'password' && (
+                        <p className="mt-8 text-sm text-on-surface-variant text-center">
+                            Belum punya akun? <Link to="/register" className="text-primary font-semibold hover:underline underline-offset-4">Daftar sekarang</Link>
                         </p>
-                    </div>
-
-                    {/* Decorative Divider */}
-                    <div className="mt-12 flex items-center justify-center space-x-4">
-                        <div className="h-[1px] w-8 bg-outline-variant"></div>
-                        <div className="w-6 h-6 bg-cover bg-center opacity-30" style={{backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuD_ENW5JZDPBrWoccWSv-VF4HIGkufG2ksaV7BMwpqtFyeji99O10fzG9EZt-ySThItmKaECHDFbN99YJNhI9H9lbxsch4iznERu_KrnKyITFMITtAS-GL2gwSn96TEupJUMl1B27WScNbvDsrrlUr3LJdgG84HIsezqnJBfCIOoVxgh0oErz-BSx2yeFSZr9-qi3qFiErUSWrUHp_jjcgmW5o4fE7fgXyx3PTYm1Od0mgt7o0wRlkLkYtdEqeFooSYbU1ETuBCcPM')"}}></div>
-                        <div className="h-[1px] w-8 bg-outline-variant"></div>
-                    </div>
+                    )}
+                    <p className="mt-10 text-center">
+                        <Link to="/" className="text-sm text-on-surface-variant hover:text-ink inline-flex items-center gap-1">
+                            <Icon name="arrow_back" className="text-[16px]" /> Kembali ke beranda
+                        </Link>
+                    </p>
                 </div>
             </main>
-
-            {/* Footer */}
-            <footer className="w-full px-grid-margin py-8 mt-auto flex flex-col md:flex-row justify-between items-center gap-4 bg-surface-container-low border-t border-outline-variant">
-                <div className="font-label-caps text-label-caps tracking-widest text-on-surface-variant">
-                    © 2026 CafeNusantara Admin. All rights reserved.
-                </div>
-                <div className="flex gap-8">
-                    <a className="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
-                    <a className="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
-                    <a className="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Support</a>
-                </div>
-            </footer>
-
-            {/* Background Effect */}
-            <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
-                <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[60%] bg-primary opacity-[0.03] blur-[120px] rounded-full"></div>
-                <div className="absolute bottom-[-10%] left-[-5%] w-[40%] h-[60%] bg-secondary opacity-[0.03] blur-[120px] rounded-full"></div>
-            </div>
         </div>
     );
 };

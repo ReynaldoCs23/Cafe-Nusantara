@@ -3,123 +3,129 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DiningTable;
 use App\Models\Order;
-use App\Models\OrderItem;
-use App\Models\Product;
-use App\Events\OrderCreated;
+use App\Services\OrderService;
+use App\Support\StoreSettings;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
+/**
+ * Pesanan dari pelanggan: QR meja (channel qr) dan website (channel online).
+ */
 class OrderController extends Controller
 {
-    public function store(Request $request)
+    public function __construct(private OrderService $orders)
     {
-        $request->validate([
-            'items' => 'required|array|min:1',
-            'items.*.product_id' => 'required|exists:products,id',
-            'items.*.quantity' => 'required|integer|min:1',
-        ]);
-
-        return DB::transaction(function () use ($request) {
-            $subtotal = 0;
-            $orderItemsData = [];
-
-            foreach ($request->items as $item) {
-                // Fetch the real product to get the actual price (prevent frontend tampering)
-                $product = Product::findOrFail($item['product_id']);
-                $quantity = $item['quantity'];
-                
-                if ($product->stock_quantity < $quantity) {
-                    abort(400, "Stok produk {$product->name} tidak mencukupi.");
-                }
-
-                $product->stock_quantity -= $quantity;
-                if ($product->stock_quantity <= 0) {
-                    $product->stock_quantity = 0;
-                    $product->is_active = false;
-                }
-                $product->save();
-
-                $itemPrice = $product->price;
-                // Add extra cost if size is Large
-                if (isset($item['customizations']['size']) && $item['customizations']['size'] === 'Large') {
-                    $itemPrice += 5000;
-                }
-                
-                $itemTotal = $itemPrice * $quantity;
-                $subtotal += $itemTotal;
-
-                $orderItemsData[] = [
-                    'product_id' => $product->id,
-                    'product_name' => $product->name,
-                    'quantity' => $quantity,
-                    'price_at_transaction' => $itemPrice,
-                    'customizations' => isset($item['customizations']) ? json_encode($item['customizations']) : null,
-                ];
-            }
-
-            // Calculate totals (11% tax)
-            $tax_amount = intval($subtotal * 0.11);
-            $grand_total = $subtotal + $tax_amount;
-
-            // Create Order
-            $order = new Order();
-            $order->id = (string) Str::uuid();
-            
-            // Check if user is authenticated via Sanctum (optional for guest checkout)
-            $order->user_id = $request->user('sanctum') ? $request->user('sanctum')->id : null;
-            
-            $order->order_number = 'ORD-' . time() . '-' . strtoupper(Str::random(4));
-            $order->subtotal = $subtotal;
-            $order->tax_amount = $tax_amount;
-            $order->grand_total = $grand_total;
-            $order->status = 'pending';
-            $order->save();
-
-            // Attach Order Items
-            $itemsToInsert = array_map(function ($data) use ($order) {
-                $data['order_id'] = $order->id;
-                $data['created_at'] = now();
-                $data['updated_at'] = now();
-                return $data;
-            }, $orderItemsData);
-
-            OrderItem::insert($itemsToInsert);
-
-            // Dispatch real-time event for dashboard & order management
-            event(new OrderCreated($order));
-
-            return response()->json([
-                'message' => 'Pesanan berhasil dibuat',
-                'data' => $order
-            ], 201);
-        });
     }
 
-    public function show($order_number)
+    public function store(Request $request)
     {
-        $order = Order::with('items')->where('order_number', $order_number)->firstOrFail();
-        
+        $validated = $request->validate([
+            'items' => 'required|array|min:1|max:50',
+            'items.*.product_id' => 'required|integer',
+            'items.*.quantity' => 'required|integer|min:1|max:99',
+            'items.*.modifier_ids' => 'nullable|array|max:20',
+            'items.*.modifier_ids.*' => 'integer',
+            'items.*.notes' => 'nullable|string|max:200',
+            'customer_name' => 'required|string|max:100',
+            'customer_phone' => ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s]{8,20}$/'],
+            'notes' => 'nullable|string|max:500',
+            'table_token' => 'nullable|string|max:64',
+            'fulfillment' => 'nullable|in:pickup,table',
+        ]);
+
+        if (! StoreSettings::isOpen()) {
+            throw ValidationException::withMessages(['store' => 'Maaf, toko sedang tutup dan belum menerima pesanan.']);
+        }
+
+        if (! StoreSettings::get('pay_at_cashier_enabled') && ! StoreSettings::get('online_payment_enabled')) {
+            throw ValidationException::withMessages(['store' => 'Pemesanan mandiri sedang dinonaktifkan. Silakan pesan di kasir.']);
+        }
+
+        $limit = (int) StoreSettings::get('max_orders_per_hour');
+        if ($limit > 0) {
+            $lastHour = Order::whereIn('channel', ['qr', 'online'])->where('created_at', '>=', now()->subHour())->count();
+            if ($lastHour >= $limit) {
+                throw ValidationException::withMessages(['store' => 'Pesanan sedang sangat ramai. Silakan coba beberapa menit lagi atau pesan di kasir.']);
+            }
+        }
+
+        $table = null;
+        if (! empty($validated['table_token'])) {
+            $table = DiningTable::where('qr_token', $validated['table_token'])->where('is_active', true)->first();
+            if (! $table) {
+                throw ValidationException::withMessages(['table_token' => 'QR meja tidak valid atau meja sedang tidak aktif.']);
+            }
+        }
+
+        $fulfillment = $table ? ($validated['fulfillment'] ?? 'table') : 'pickup';
+        $user = $request->user('sanctum');
+
+        $order = $this->orders->create([
+            'channel' => $table ? 'qr' : 'online',
+            'fulfillment' => $fulfillment,
+            'dining_table_id' => $fulfillment === 'table' ? $table?->id : null,
+            'items' => $validated['items'],
+            'customer_name' => trim($validated['customer_name']),
+            'customer_phone' => $validated['customer_phone'] ?? $user?->phone_number,
+            'notes' => $validated['notes'] ?? null,
+            'user_id' => $user?->id,
+            'idempotency_key' => $this->idempotencyKey($request),
+            'payment_due_at' => now()->addMinutes((int) StoreSettings::get('qr_payment_timeout_minutes')),
+        ]);
+
+        $order->load('items', 'diningTable:id,name');
+
         return response()->json([
-            'data' => $order
-        ], 200);
+            'message' => 'Pesanan berhasil dibuat. Silakan lakukan pembayaran di kasir.',
+            'data' => $order,
+            'access_token' => $order->access_token,
+        ], 201);
+    }
+
+    /**
+     * Status pesanan untuk pelanggan. Wajib token akses (bukan hanya nomor pesanan).
+     */
+    public function show(Request $request, string $orderNumber)
+    {
+        $order = Order::with(['items', 'diningTable:id,name'])
+            ->where('order_number', $orderNumber)
+            ->first();
+
+        $user = $request->user('sanctum');
+        $token = (string) $request->query('token', '');
+        $authorized = $order && (
+            ($token !== '' && hash_equals($order->access_token, $token))
+            || ($user && $order->user_id === $user->id)
+            || ($user && $user->isStaff())
+        );
+
+        if (! $authorized) {
+            return response()->json(['message' => 'Pesanan tidak ditemukan'], 404);
+        }
+
+        return response()->json([
+            'data' => $order,
+        ]);
     }
 
     public function myOrders(Request $request)
     {
-        $user = $request->user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
+        $orders = Order::with(['items.product:id,image_path', 'diningTable:id,name'])
+            ->where('user_id', $request->user()->id)
+            ->orderByDesc('created_at')
+            ->limit(100)
+            ->get()
+            ->each(fn (Order $order) => $order->makeVisible('access_token'));
 
-        $orders = Order::with('items.product')
-            ->where('user_id', $user->id)
-            ->orderBy('created_at', 'desc')
-            ->get();
-            
-        return response()->json([
-            'data' => $orders
-        ], 200);
+        return response()->json(['data' => $orders]);
+    }
+
+    private function idempotencyKey(Request $request): ?string
+    {
+        $key = $request->header('Idempotency-Key');
+
+        return is_string($key) && preg_match('/^[A-Za-z0-9\-_]{8,100}$/', $key) ? $key : null;
     }
 }

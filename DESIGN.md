@@ -167,4 +167,4 @@ The shape language is **Soft-Minimalist**.
 - **Input Fields:** Minimalist design with only a bottom border (1px `#E5E5E5`). Upon focus, the border transitions to Charcoal (`#2C2C2C`).
 - **Chips/Badges:** Small, pill-shaped tags with a Sage Green (`#8A9A5B`) background at 10% opacity and solid Sage text. Used for "New Arrival" or "Organic."
 - **Lists:** Clean, left-aligned text with 1px horizontal dividers between items. Avoid icons unless they are custom-drawn, ultra-thin line art.
-- **Navigation:** The header uses a persistent Alabaster background. Links are in `label-caps` with a 2px underline appearing only on hover or active state.
+- **Navigation:** The header uses a persistent Alabaster background. Links are in `label-caps` with a 2px underline appearing only on hover or active state.ln
